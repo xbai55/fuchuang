@@ -1,0 +1,22 @@
+# PyCharm 配置文件
+.idea/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境 (如果有)
+venv/
+env/
+.env
+
+# 深度学习权重与大文件
+
+*.pt
+*.onnx
+
+# 临时音频测试文件
+*.wav
+*.mp3
+*.m4a
