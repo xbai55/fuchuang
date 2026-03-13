@@ -20,3 +20,7 @@ env/
 *.wav
 *.mp3
 *.m4a
+
+Datasets/
+train.py
+debug.py
