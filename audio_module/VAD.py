@@ -1,44 +1,60 @@
 import torch
 import numpy as np
-from faster_whisper import WhisperModel
+from modelscope.pipelines import pipeline
+from modelscope.utils.constant import Tasks
 
 
 class AntiFraudAudioEngine:
-    def __init__(self, model_size="large-v3", device="cuda"):
-        # 启用 large-v3 大模型以获取极限语义精度
-        # 使用 int8_float16 量化，大幅降低显存占用，防止 OOM 报错
-        self.asr_model = WhisperModel(model_size, device=device, compute_type="int8_float16")
-
-        # 加载 Silero VAD 模型用于高精度端点检测
-        self.vad_model, utils = torch.hub.load(
-            repo_or_dir='snakers4/silero-vad',
-            model='silero_vad',
-            force_reload=False
+    def __init__(self, device="cuda"):
+        # 初始化阿里 FunASR 流水线
+        # 自动加载 Paraformer-large 语音识别模型
+        # 同时加载 FSMN-VAD 语音端点检测模型与 CT-Transformer 标点恢复模型
+        self.inference_pipeline = pipeline(
+            task=Tasks.auto_speech_recognition,
+            model='damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch',
+            vad_model='damo/speech_fsmn_vad_zh-cn-16k-common-pytorch',
+            punc_model='damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch',
+            device=device
         )
-        (self.get_speech_timestamps, _, _, _, _) = utils
 
     def process_pipeline(self, audio_array: np.ndarray):
-        """核心流水线：接收纯内存 numpy 数组进行 VAD 截断和 ASR 高精度转写"""
+        """核心流水线：使用阿里 FunASR 进行端到端识别"""
 
-        # 1. 转换为 Tensor 供 Silero VAD 使用
-        wav_tensor = torch.from_numpy(audio_array).float()
+        # 检查音频采样率（FunASR 强制要求 16000Hz）
+        # 如果 audio_array 是 float 格式，通常保持在 [-1, 1] 范围内
+        try:
+            # 执行推理
+            # param_dict 支持设置 hotwords，用于增强反诈关键词的敏感度
+            results = self.inference_pipeline(
+                input=audio_array,
+                batch_size_s=300,
+                hotwords="公安局 专案组 洗钱 安全账户 转账 验证码 国家补贴"
+            )
 
-        # 2. 执行 VAD 端点检测 (采样率固定为 16000)
-        speech_timestamps = self.get_speech_timestamps(wav_tensor, self.vad_model, sampling_rate=16000)
+            if not results or len(results) == 0:
+                return "未检测到有效语音", []
 
-        if not speech_timestamps:
-            return "未检测到有效语音", []
+            # 提取转写结果
+            full_text = results[0].get('text', "")
 
-        # 3. 执行大模型 ASR 转录 (注入反诈专属先验提示词)
-        segments, info = self.asr_model.transcribe(
-            audio_array,
-            beam_size=5,
-            language="zh",
-            vad_filter=True,
-            initial_prompt="这是一段诈骗录音，可能包含以下词汇：公安局、专案组、洗钱、安全账户、转账、银行卡、验证码、理疗仪、国家补贴。"
-        )
+            # 提取 VAD 时间戳信息 (FunASR 的 VAD 信息通常在结果的 timestamps 字段中)
+            # 格式通常为 [[start_ms, end_ms], ...]
+            vad_timestamps = results[0].get('timestamps', [])
 
-        # 拼接全量文本
-        full_text = "".join([segment.text for segment in segments])
+            if not full_text:
+                return "语音过短或无法识别", []
 
-        return full_text, speech_timestamps
+            return full_text, vad_timestamps
+
+        except Exception as e:
+            print(f"ASR 推理发生错误: {str(e)}")
+            return f"识别失败: {str(e)}", []
+
+
+# 单元测试示例
+if __name__ == "__main__":
+    # 模拟一段 16kHz 的 1秒空白音频
+    dummy_audio = np.zeros(16000, dtype=np.float32)
+    engine = AntiFraudAudioEngine()
+    text, stamps = engine.process_pipeline(dummy_audio)
+    print(f"识别结果: {text}")

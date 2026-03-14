@@ -11,7 +11,7 @@ app = FastAPI(title="反诈智能助手 - 多模态极速引擎")
 print("正在预热 AI 模型...")
 try:
     fake_analyzer = AudioFakeAnalyzer(weight_path="./weights/latest_best_audio_model.pth")
-    nlp_engine = AntiFraudAudioEngine(model_size="small", device="cuda")
+    nlp_engine = AntiFraudAudioEngine(device="cuda")
     print("纯内存流水线装载完毕。")
 except Exception as e:
     print(f"模型加载失败，请检查权重: {e}")
