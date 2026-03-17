@@ -23,6 +23,11 @@ env/
 *.m4a
 
 Datasets/
+dataset/
+keyframes/
+raw_videos/
+
+prepare_dataset.py
 train.py
 debug.py
 
