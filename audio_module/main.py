@@ -1,16 +1,35 @@
 import time
 import asyncio
+import os
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from audio_inference import AudioFakeAnalyzer, convert_bytes_to_ndarray
 from VAD import AntiFraudAudioEngine
 
+from pathlib import Path
+
+# 获取当前项目根目录（假设 main.py 在 audio_module 下，向上退一级）
+# 如果 main.py 就在项目根目录，用 Path(__file__).parent 即可
+project_root = Path(__file__).parent.parent 
+model_cache_dir = project_root / "model_hub"
+
+# 设置 ModelScope 缓存路径环境变量
+os.environ['MODELSCOPE_CACHE'] = str(model_cache_dir)
+
+print(f"模型缓存路径已设置为: {model_cache_dir}")
+
 app = FastAPI(title="反诈智能助手 - 多模态极速引擎")
 
 print("正在预热 AI 模型...")
 try:
-    fake_analyzer = AudioFakeAnalyzer(weight_path="./weights/latest_best_audio_model.pth")
+    # 1. 获取当前脚本 (main.py) 所在的绝对目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # 2. 拼接音频模型的绝对路径
+    # 使用 os.path.join 会自动处理 Windows (\) 和 Linux (/) 的路径分隔符差异
+    audio_weight_path = os.path.join(current_dir, "weights", "latest_best_audio_model.pth")
+    # 3. 传入增强后的路径
+    fake_analyzer = AudioFakeAnalyzer(weight_path=audio_weight_path)
     nlp_engine = AntiFraudAudioEngine(device="cuda")
     print("纯内存流水线装载完毕。")
 except Exception as e:

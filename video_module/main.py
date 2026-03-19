@@ -20,8 +20,14 @@ keyframe_extractor: KeyframeExtractor | None = None
 print("正在预热视频 AI 模型...")
 try:
     # 请确保该路径下确实存在模型权重文件
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # 2. 动态拼接权重文件的绝对路径
+    model_weight_path = os.path.join(current_dir, "weights", "final_model.pth")
+
+    # 3. 传入修改后的路径
     video_fake_analyzer = VideoFakeAnalyzer(
-        weight_path="./weights/final_model.pth",
+        weight_path=model_weight_path,
         snap_timestamp_sec=1.0,
     )
     keyframe_extractor = KeyframeExtractor(
