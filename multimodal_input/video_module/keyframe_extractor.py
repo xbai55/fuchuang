@@ -40,6 +40,18 @@ class KeyframeResult:
 
 
 # ==========================================
+# 工具函数
+# ==========================================
+def check_ffmpeg_available():
+    """检查FFmpeg是否可用"""
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+# ==========================================
 # 人脸检测器
 # ==========================================
 class FaceDetector:
@@ -86,6 +98,10 @@ class KeyframeExtractor:
         face_priority: bool = True,
         ffmpeg_timeout: int = 120,
     ):
+        # 检查FFmpeg是否可用
+        if not check_ffmpeg_available():
+            raise RuntimeError("FFmpeg未安装或不在系统PATH中，请先安装FFmpeg并确保可以在命令行中运行")
+            
         self.output_root = os.path.abspath(output_root)
         self.interval_sec = interval_sec
         self.scene_threshold = scene_threshold
