@@ -1,0 +1,6 @@
+paddlepaddle
+paddleocr
+fastapi
+uvicorn
+numpy
+opencv-python

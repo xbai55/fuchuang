@@ -1,0 +1,17 @@
+# LLM Configuration
+# Supports: Kimi (Moonshot), OpenAI, and other OpenAI-compatible APIs
+
+# Kimi (Moonshot) - Default
+model: moonshot-v1-8k  # Options: moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k
+temperature: 0.3
+max_tokens: 1500
+timeout: 30
+base_url: https://api.moonshot.cn/v1
+
+# OpenAI Configuration (uncomment to use)
+# model: gpt-4o
+# base_url: https://api.openai.com/v1
+
+# Other OpenAI-compatible APIs (uncomment and modify as needed)
+# model: your-model-name
+# base_url: https://your-api-endpoint.com/v1

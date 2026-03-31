@@ -1,0 +1,51 @@
+# ============================================
+# 反诈预警专家系统 - Python 依赖
+# ============================================
+
+# ---------- Web 框架 ----------
+fastapi==0.121.2
+uvicorn[standard]==0.38.0
+python-multipart==0.0.6
+
+# ---------- 数据验证 ----------
+pydantic==2.12.3
+pydantic[email]==2.12.3
+pydantic-settings==2.1.0
+
+# ---------- 数据库 ----------
+sqlalchemy==2.0.44
+aiosqlite==0.19.0
+
+# ---------- 认证安全 ----------
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# ---------- AI / LLM ----------
+langgraph==0.2.76
+langgraph-checkpoint==2.1.2
+langgraph-prebuilt==0.1.8
+langchain-openai>=0.3.0
+openai>=1.0.0
+
+# ---------- 工具库 ----------
+python-dotenv==1.2.1
+pyyaml>=6.0.0
+jinja2>=3.0.0
+click>=8.0.0
+requests>=2.28.0
+httpx>=0.24.0
+
+# ---------- 数据处理 ----------
+numpy>=1.24.0
+pandas>=2.0.0
+pillow>=10.0.0
+
+# ---------- 多模态处理 (可选) ----------
+# paddleocr>=2.7.0      # OCR 文字识别
+# funasr>=1.0.0         # 语音识别
+# opencv-python>=4.8.0  # 视频处理
+
+# ---------- 开发测试 (可选) ----------
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+# pytest-cov>=4.0.0

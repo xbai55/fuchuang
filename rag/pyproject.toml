@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fraud-rag"
+version = "0.1.0"
+description = "Fraud-oriented RAG pipeline with official-source crawlers and retrieval-based warning"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "joblib>=1.4,<2",
+  "PyYAML>=6,<7",
+  "scikit-learn>=1.5,<2",
+]
+
+[project.optional-dependencies]
+semantic = [
+  "sentence-transformers>=3,<4",
+]
+
+[project.scripts]
+fraud-rag = "fraud_rag.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

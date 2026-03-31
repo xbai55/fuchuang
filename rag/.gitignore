@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+.DS_Store
+artifacts/
+data/raw/*.jsonl
+data/processed/*.jsonl

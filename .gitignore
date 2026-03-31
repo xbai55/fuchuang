@@ -1,0 +1,77 @@
+
+# PyCharm 配置文件
+.idea/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境 (如果有)
+venv/
+env/
+.env
+
+# 深度学习权重与大文件
+
+*.pt
+*.onnx
+
+# 临时音频测试文件
+*.wav
+*.mp3
+*.m4a
+
+Datasets/
+train.py
+debug.py
+
+node_modules
+dist
+.DS_Store
+*.swp
+.git/*
+__pycache__/
+*.pyc
+.venv/*
+*.o
+*.a
+/vendor
+*.egg-info/
+/.env
+.env
+
+# 视频文件
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.mkv
+*.webm
+*.m4v
+*.mpeg
+*.mpg
+*.3gp
+*.f4v
+*.rmvb
+*.vob
+
+# 归档文件
+*.iso
+*.dmg
+*.rar
+*.zip
+*.gz
+
+# 文档类也默认加入
+*.pdf
+*.docx
+*.doc
+*.xlsx
+*.xls
+*.ppt
+*.pptx
+*.xlsx
+*.csv
+

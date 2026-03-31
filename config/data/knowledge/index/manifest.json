@@ -1,0 +1,5 @@
+{
+  "backend": "tfidf",
+  "model_name": null,
+  "chunk_count": 6
+}

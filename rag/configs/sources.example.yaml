@@ -1,0 +1,85 @@
+paths:
+  raw_documents: data/raw/documents.jsonl
+  processed_documents: data/processed/documents.jsonl
+  chunks: data/processed/chunks.jsonl
+  index_dir: artifacts/index
+
+index:
+  backend: tfidf
+  dense_model: BAAI/bge-base-zh-v1.5
+  chunk_size: 420
+  chunk_overlap: 80
+  top_k: 6
+
+warning:
+  high_threshold: 0.32
+  medium_threshold: 0.18
+
+photo_types_seed_file: configs/photo_types.seed.yaml
+
+sources:
+  seed_urls:
+    - url: http://www.npc.gov.cn/npc/c2/c30834/202209/t20220902_319186.html
+      category: law
+      subtype: anti_telecom_fraud_law
+      tags: [法律条文, 反电信网络诈骗法]
+    - url: http://www.npc.gov.cn/npc/c2/c10134/201905/t20190521_255970.html
+      category: law
+      subtype: fraud_article_266_interpretation
+      tags: [法律解释, 刑法, 诈骗罪, 第二百六十六条]
+    - url: https://www.court.gov.cn/fabu/xiangqing/439341.html
+      category: law
+      subtype: cross_border_judicial_opinion
+      tags: [司法意见, 跨境电诈, 法律适用]
+    - url: https://www.gov.cn/zhengce/202407/content_6964835.htm
+      category: law
+      subtype: policy_interpretation
+      tags: [政策解读, 跨境电诈, 追赃挽损]
+    - url: https://www.court.gov.cn/zixun/xiangqing/490051.html
+      category: case
+      subtype: telecom_fraud_cases
+      tags: [典型案例, 电信网络诈骗]
+    - url: https://www.court.gov.cn/zixun/xiangqing/482861.html
+      category: case
+      subtype: livelihood_fraud_cases
+      tags: [典型案例, 涉民生诈骗]
+    - url: https://www.court.gov.cn/zixun/xiangqing/439351.html
+      category: case
+      subtype: cross_border_fraud_cases
+      tags: [典型案例, 跨境电诈]
+
+  npc:
+    enabled: true
+    search_terms:
+      - 反电信网络诈骗法
+      - 刑法 第二百六十六条
+      - 诈骗罪
+    title_include:
+      - 反电信网络诈骗法
+      - 第二百六十六条
+      - 诈骗罪
+    page_size: 30
+    position: 0
+
+  court:
+    enabled: true
+    search_terms:
+      - 电信网络诈骗 典型案例
+      - 诈骗
+    title_include:
+      - 典型案例
+      - 诈骗案
+      - 入库参考案例
+      - 法律若干问题的意见
+    max_pages_per_query: 2
+
+  gov_images:
+    enabled: true
+    search_terms:
+      - 电信网络诈骗
+      - 反诈
+    title_include:
+      - 诈骗
+      - 反诈
+      - 电信
+    page_size: 10

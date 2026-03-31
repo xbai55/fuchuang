@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"$HOME/flutter/bin:$PATH\")",
+      "Bash(flutter run:*)",
+      "Bash(python -c \"import main; print\\(''语法检查通过''\\)\")",
+      "Bash(npm run:*)",
+      "Bash(find . -maxdepth 3 -type f \\\\\\(-name *.py -o -name *.sh -o -name *.json -o -name *.yaml -o -name *.yml -o -name *.md -o -name *.txt -o -name .env* \\\\\\))",
+      "Bash(chmod +x /c/Users/xbai55/Desktop/fc/claude_fc/run.sh /c/Users/xbai55/Desktop/fc/claude_fc/stop.sh)",
+      "Bash(bash -n /c/Users/xbai55/Desktop/fc/claude_fc/run.sh)",
+      "Bash(bash -n /c/Users/xbai55/Desktop/fc/claude_fc/stop.sh)",
+      "Bash(grep -n 'fi$' stop.sh)",
+      "Bash(grep:*)",
+      "Bash(bash run.sh)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(python:*)",
+      "Bash(find . -type f -name *.py -o -name *.go -o -name *.vue -o -name *.ts -o -name *.js)",
+      "Bash(wc -l /c/Users/xbai55/Desktop/fc/claude_fc/src/graphs/nodes/*.py)",
+      "Bash(set OPENAI_API_KEY=dummy_key)",
+      "Bash(export OPENAI_API_KEY=dummy_key)",
+      "Bash(pip show:*)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(python -c \":*)",
+      "Bash(ls -la C:/Users/xbai55/Desktop/fc/claude_fc/backend/*.db)"
+    ]
+  }
+}
