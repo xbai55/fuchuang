@@ -14,6 +14,7 @@ from src.core.models import (
 )
 from src.core.interfaces import LLMClient
 from src.core.utils import load_node_config
+from src.core.utils.risk_personalization import build_personalized_thresholds, risk_level_from_score
 
 
 class RiskEngine:
@@ -74,6 +75,17 @@ class RiskEngine:
 ## 用户画像
 - 用户类型: {user_role}
 
+## 短期记忆
+{short_term_memory_summary}
+
+## 长期行为画像
+{long_term_memory_summary}
+
+## 个性化阈值
+- low_threshold: {dynamic_low_threshold}
+- high_threshold: {dynamic_high_threshold}
+- 调整依据: {threshold_adjustment_reasons}
+
 请输出JSON格式的风险评估结果。"""
 
     def __init__(
@@ -130,23 +142,52 @@ class RiskEngine:
         Returns:
             RiskAssessment result
         """
+        metadata = dict(state.workflow_metadata or {})
+        dynamic_thresholds = build_personalized_thresholds(
+            user_role=state.user_context.user_role.value,
+            short_term_events=list(metadata.get("recent_detections") or []),
+            history_profile=dict(metadata.get("history_profile") or {}),
+        )
+        low_threshold = int(dynamic_thresholds.get("low_threshold", self.LOW_THRESHOLD))
+        high_threshold = int(dynamic_thresholds.get("high_threshold", self.HIGH_THRESHOLD))
+
         # 步骤 1: RAG 基于知识库的评估
         rag_assessment = None
         if self.use_rag_detector and self._rag_detector:
-            rag_assessment = await self._assess_with_rag(state)
+            rag_assessment = await self._assess_with_rag(
+                state,
+                low_threshold=low_threshold,
+                high_threshold=high_threshold,
+            )
 
         # 步骤 2: LLM 综合评估
-        llm_assessment = await self._assess_with_llm(state, rag_assessment)
+        llm_assessment = await self._assess_with_llm(
+            state,
+            rag_assessment,
+            low_threshold=low_threshold,
+            high_threshold=high_threshold,
+            dynamic_thresholds=dynamic_thresholds,
+        )
 
         # 步骤 3: 融合评估结果
         if rag_assessment:
-            return self._merge_assessments(llm_assessment, rag_assessment)
+            final_assessment = self._merge_assessments(
+                llm_assessment,
+                rag_assessment,
+                low_threshold=low_threshold,
+                high_threshold=high_threshold,
+            )
+        else:
+            final_assessment = llm_assessment
 
-        return llm_assessment
+        self._append_threshold_note(final_assessment, dynamic_thresholds)
+        return final_assessment
 
     async def _assess_with_rag(
         self,
         state: GlobalState,
+        low_threshold: int,
+        high_threshold: int,
     ) -> Optional[RiskAssessment]:
         """
         使用 RAG RiskDetector 进行评估
@@ -183,13 +224,15 @@ class RiskEngine:
         # 转换为 RiskAssessment
         score = int(result.confidence * 100)
 
-        # 映射风险等级
+        # 映射风险等级：融合 detector 等级与个性化分段
         level_map = {
             "low": RiskLevel.LOW,
             "medium": RiskLevel.MEDIUM,
             "high": RiskLevel.HIGH,
         }
-        level = level_map.get(result.risk_level, RiskLevel.LOW)
+        detector_level = level_map.get(result.risk_level, RiskLevel.LOW)
+        dynamic_level = RiskLevel(risk_level_from_score(score, low_threshold, high_threshold))
+        level = self._max_risk_level(detector_level, dynamic_level)
 
         # 提取诈骗类型
         scam_type = result.matched_subtypes[0] if result.matched_subtypes else ""
@@ -206,6 +249,9 @@ class RiskEngine:
         self,
         state: GlobalState,
         rag_assessment: Optional[RiskAssessment] = None,
+        low_threshold: int = LOW_THRESHOLD,
+        high_threshold: int = HIGH_THRESHOLD,
+        dynamic_thresholds: Optional[Dict[str, Any]] = None,
     ) -> RiskAssessment:
         """
         使用 LLM 进行综合评估
@@ -218,7 +264,11 @@ class RiskEngine:
             RiskAssessment
         """
         # Build context from state
-        context = self._build_assessment_context(state, rag_assessment)
+        context = self._build_assessment_context(
+            state,
+            rag_assessment,
+            dynamic_thresholds=dynamic_thresholds,
+        )
 
         # Build user prompt
         user_prompt = self.user_template.format(**context)
@@ -233,19 +283,32 @@ class RiskEngine:
 
             # Parse result
             if response.parsed_json:
-                return self._parse_assessment(response.parsed_json)
+                return self._parse_assessment(
+                    response.parsed_json,
+                    low_threshold=low_threshold,
+                    high_threshold=high_threshold,
+                )
             else:
                 # Fallback if JSON parsing failed
-                return self._fallback_assessment(state)
+                return self._fallback_assessment(
+                    state,
+                    low_threshold=low_threshold,
+                    high_threshold=high_threshold,
+                )
 
         except Exception as e:
             print(f"[错误] 风险评估失败: {e}")
-            return self._fallback_assessment(state)
+            return self._fallback_assessment(
+                state,
+                low_threshold=low_threshold,
+                high_threshold=high_threshold,
+            )
 
     def _build_assessment_context(
         self,
         state: GlobalState,
         rag_assessment: Optional[RiskAssessment] = None,
+        dynamic_thresholds: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Build context dict for prompt formatting.
@@ -277,12 +340,24 @@ class RiskEngine:
         # Get user role
         user_role = state.user_context.user_role.value
 
+        threshold_meta = dynamic_thresholds or {}
+        short_term_summary = state.short_term_memory_summary or "暂无短期交互记忆"
+        history_profile = dict((state.workflow_metadata or {}).get("history_profile") or {})
+        long_term_summary = self._format_history_profile(history_profile)
+        threshold_reasons = threshold_meta.get("adjustment_reasons") or []
+        threshold_reason_text = "；".join(str(item) for item in threshold_reasons) if threshold_reasons else "无"
+
         return {
             "input_text": input_text,
             "perception_summary": perception_summary,
             "similar_cases": cases_text,
             "rag_analysis": rag_analysis,
             "user_role": user_role,
+            "short_term_memory_summary": short_term_summary,
+            "long_term_memory_summary": long_term_summary,
+            "dynamic_low_threshold": int(threshold_meta.get("low_threshold", self.LOW_THRESHOLD)),
+            "dynamic_high_threshold": int(threshold_meta.get("high_threshold", self.HIGH_THRESHOLD)),
+            "threshold_adjustment_reasons": threshold_reason_text,
         }
 
     def _format_rag_analysis(self, assessment: Optional[RiskAssessment]) -> str:
@@ -325,7 +400,31 @@ class RiskEngine:
 
         return "\n\n".join(parts)
 
-    def _parse_assessment(self, data: Dict[str, Any]) -> RiskAssessment:
+    def _format_history_profile(self, history_profile: Dict[str, Any]) -> str:
+        """Format long-term user behavior profile for prompts."""
+        if not history_profile:
+            return "暂无长期历史行为记录"
+
+        total_count = int(history_profile.get("total_count", 0) or 0)
+        if total_count <= 0:
+            return "暂无长期历史行为记录"
+
+        avg_score = float(history_profile.get("avg_score", 0.0) or 0.0)
+        high_ratio = float(history_profile.get("high_ratio", 0.0) or 0.0)
+        medium_ratio = float(history_profile.get("medium_ratio", 0.0) or 0.0)
+        trend = "上升" if history_profile.get("rising_risk") else "平稳"
+
+        return (
+            f"历史检测 {total_count} 次，平均风险分 {avg_score:.1f}/100，"
+            f"高风险占比 {high_ratio:.0%}，中风险占比 {medium_ratio:.0%}，最近趋势 {trend}"
+        )
+
+    def _parse_assessment(
+        self,
+        data: Dict[str, Any],
+        low_threshold: int,
+        high_threshold: int,
+    ) -> RiskAssessment:
         """
         Parse LLM response into RiskAssessment.
 
@@ -336,18 +435,18 @@ class RiskEngine:
             RiskAssessment object
         """
         score = int(data.get("risk_score", 0))
+        score_level = RiskLevel(risk_level_from_score(score, low_threshold, high_threshold))
 
         # Determine level from score if not provided
         level_str = data.get("risk_level", "")
         if not level_str:
-            if score < self.LOW_THRESHOLD:
-                level = RiskLevel.LOW
-            elif score <= self.HIGH_THRESHOLD:
-                level = RiskLevel.MEDIUM
-            else:
-                level = RiskLevel.HIGH
+            level = score_level
         else:
-            level = RiskLevel(level_str.lower())
+            try:
+                llm_level = RiskLevel(level_str.lower())
+            except ValueError:
+                llm_level = score_level
+            level = self._max_risk_level(llm_level, score_level)
 
         # Parse risk clues
         clues = data.get("risk_clues", [])
@@ -366,6 +465,8 @@ class RiskEngine:
         self,
         llm_assessment: RiskAssessment,
         rag_assessment: RiskAssessment,
+        low_threshold: int,
+        high_threshold: int,
     ) -> RiskAssessment:
         """
         融合 LLM 和 RAG 的评估结果
@@ -386,11 +487,9 @@ class RiskEngine:
         # 加权分数
         merged_score = int(rag_assessment.score * 0.4 + llm_assessment.score * 0.6)
 
-        # 取较高风险等级
-        level_priority = {RiskLevel.LOW: 1, RiskLevel.MEDIUM: 2, RiskLevel.HIGH: 3}
-        llm_priority = level_priority.get(llm_assessment.level, 1)
-        rag_priority = level_priority.get(rag_assessment.level, 1)
-        merged_level = llm_assessment.level if llm_priority >= rag_priority else rag_assessment.level
+        # 取较高风险等级，并确保符合个性化阈值分段
+        score_level = RiskLevel(risk_level_from_score(merged_score, low_threshold, high_threshold))
+        merged_level = self._max_risk_level(llm_assessment.level, rag_assessment.level, score_level)
 
         # 合并线索
         merged_clues = list(dict.fromkeys(
@@ -411,7 +510,12 @@ class RiskEngine:
             reasoning=merged_reasoning,
         )
 
-    def _fallback_assessment(self, state: GlobalState) -> RiskAssessment:
+    def _fallback_assessment(
+        self,
+        state: GlobalState,
+        low_threshold: int,
+        high_threshold: int,
+    ) -> RiskAssessment:
         """
         Generate fallback assessment when LLM fails.
 
@@ -444,12 +548,7 @@ class RiskEngine:
         score = min(score, 100)
 
         # Determine level
-        if score < self.LOW_THRESHOLD:
-            level = RiskLevel.LOW
-        elif score <= self.HIGH_THRESHOLD:
-            level = RiskLevel.MEDIUM
-        else:
-            level = RiskLevel.HIGH
+        level = RiskLevel(risk_level_from_score(score, low_threshold, high_threshold))
 
         return RiskAssessment(
             score=score,
@@ -459,7 +558,12 @@ class RiskEngine:
             reasoning="基于规则回退评估" if score > 0 else "未检测到明显风险",
         )
 
-    def get_risk_level_from_score(self, score: int) -> RiskLevel:
+    def get_risk_level_from_score(
+        self,
+        score: int,
+        low_threshold: Optional[int] = None,
+        high_threshold: Optional[int] = None,
+    ) -> RiskLevel:
         """
         Get risk level from score.
 
@@ -469,12 +573,36 @@ class RiskEngine:
         Returns:
             RiskLevel
         """
-        if score < self.LOW_THRESHOLD:
-            return RiskLevel.LOW
-        elif score <= self.HIGH_THRESHOLD:
-            return RiskLevel.MEDIUM
-        else:
-            return RiskLevel.HIGH
+        return RiskLevel(
+            risk_level_from_score(
+                score,
+                low_threshold=self.LOW_THRESHOLD if low_threshold is None else int(low_threshold),
+                high_threshold=self.HIGH_THRESHOLD if high_threshold is None else int(high_threshold),
+            )
+        )
+
+    @staticmethod
+    def _max_risk_level(*levels: RiskLevel) -> RiskLevel:
+        level_priority = {RiskLevel.LOW: 1, RiskLevel.MEDIUM: 2, RiskLevel.HIGH: 3}
+        best = RiskLevel.LOW
+        best_priority = 0
+        for level in levels:
+            priority = level_priority.get(level, 0)
+            if priority > best_priority:
+                best = level
+                best_priority = priority
+        return best
+
+    def _append_threshold_note(self, assessment: RiskAssessment, threshold_meta: Dict[str, Any]) -> None:
+        """Append personalized threshold details to assessment reasoning."""
+        low_threshold = int(threshold_meta.get("low_threshold", self.LOW_THRESHOLD))
+        high_threshold = int(threshold_meta.get("high_threshold", self.HIGH_THRESHOLD))
+        reasons = threshold_meta.get("adjustment_reasons") or []
+        reason_text = "；".join(str(item) for item in reasons) if reasons else "无"
+        suffix = f"[个性化阈值] low<{low_threshold}, high>{high_threshold}；依据: {reason_text}"
+
+        base_reasoning = (assessment.reasoning or "").strip()
+        assessment.reasoning = f"{base_reasoning}\n{suffix}" if base_reasoning else suffix
 
     def get_stats(self) -> Dict[str, Any]:
         """

@@ -19,6 +19,8 @@ from .common import (
 from .common import (
     FraudDetectionRequest,
     FraudDetectionResponse,
+    FeedbackRequest,
+    FeedbackResponse,
 )
 
 # Agent 相关
@@ -42,6 +44,8 @@ __all__ = [
     # 反诈预警相关
     "FraudDetectionRequest",
     "FraudDetectionResponse",
+    "FeedbackRequest",
+    "FeedbackResponse",
     # Agent 相关
     "AgentChatRequest",
     "AgentChatResponse",

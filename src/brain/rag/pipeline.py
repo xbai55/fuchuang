@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -14,6 +15,7 @@ from typing import List, Iterable, Optional
 from src.brain.rag.models import KnowledgeChunk, KnowledgeDocument
 from src.brain.rag.indexer import SimilarityIndex
 from src.brain.rag.config import RAGConfig, load_rag_config_from_dict
+from src.brain.rag.crawler import collect_documents
 
 
 def sha1_text(*parts: str) -> str:
@@ -217,25 +219,7 @@ class KnowledgePipeline:
         Returns:
             KnowledgeDocument 列表
         """
-        documents: list[KnowledgeDocument] = []
-
-        # 从种子 URL 收集
-        for seed in self.config.sources.seed_urls:
-            # 这里简化处理，实际应从 URL 抓取
-            doc = KnowledgeDocument(
-                doc_id=sha1_text(seed.url),
-                url=seed.url,
-                canonical_url=seed.url,
-                source_site="manual_seed",
-                category=seed.category,
-                title=f"Seed: {seed.url}",
-                content="Content from seed URL (placeholder)",
-                subtype=seed.subtype,
-                tags=seed.tags,
-            )
-            documents.append(doc)
-
-        return documents
+        return await asyncio.to_thread(collect_documents, self.config)
 
     def chunk(self) -> list[KnowledgeChunk]:
         """

@@ -162,6 +162,13 @@ async def update_user_profile(
             "email": current_user.email,
             "user_role": current_user.user_role,
             "guardian_name": current_user.guardian_name,
+            "theme": current_user.theme,
+            "notify_enabled": current_user.notify_enabled,
+            "notify_high_risk": current_user.notify_high_risk,
+            "notify_guardian_alert": current_user.notify_guardian_alert,
+            "language": current_user.language,
+            "font_size": current_user.font_size,
+            "privacy_mode": current_user.privacy_mode,
         },
         message="资料更新成功"
     )

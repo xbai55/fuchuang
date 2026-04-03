@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 # ========== 用户相关 ==========
@@ -68,9 +68,31 @@ class FraudDetectionRequest(BaseModel):
     video_url: Optional[str] = None
 
 class FraudDetectionResponse(BaseModel):
+    detection_id: Optional[str] = None
+    intent: Optional[str] = None
+    short_term_memory_summary: Optional[str] = None
     risk_score: int
     risk_level: str
     scam_type: str
     warning_message: str
     final_report: str
     guardian_alert: bool
+    alert_reason: Optional[str] = None
+    action_items: List[str] = Field(default_factory=list)
+    escalation_actions: List[Dict[str, str]] = Field(default_factory=list)
+    guardian_notification: Optional[Dict[str, Any]] = None
+    similar_cases: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class FeedbackRequest(BaseModel):
+    detection_id: str
+    feedback_type: str = Field(..., pattern="^(correct|false_positive|false_negative|useful|not_useful)$")
+    comment: Optional[str] = None
+
+
+class FeedbackResponse(BaseModel):
+    success: bool
+    feedback_id: str
+    timestamp: str
+    ingestion: Optional[Dict[str, Any]] = None
+    feedback_stats: Dict[str, Any] = Field(default_factory=dict)

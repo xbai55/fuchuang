@@ -5,9 +5,13 @@ This module provides the main interface for processing various media types
 (text, audio, image, video) with parallel execution and unified output.
 """
 import asyncio
+import io
+import os
+import tempfile
 from typing import Dict, List, Optional, Type
 
 from src.core.models import MediaFile, MediaType, PerceptionResult
+from src.core.utils import run_in_threadpool
 from src.core.utils.async_utils import AsyncTaskGroup
 from src.perception.interfaces.base_processor import BaseProcessor
 from src.perception.models.perception_models import ProcessorConfig, ProcessingContext
@@ -46,31 +50,111 @@ class PerceptionManager:
         """
         self.config = config or ProcessorConfig()
 
+        shared_ocr_processor = OCRProcessor(self.config)
+
         # Initialize processors
         self._processors: Dict[str, BaseProcessor] = {
             "text": TextProcessor(),
             "audio": AudioProcessor(self.config),
-            "image": OCRProcessor(self.config),
-            "video": VideoProcessor(self.config),
+            "image": shared_ocr_processor,
+            "video": VideoProcessor(
+                self.config,
+                shared_ocr_processor=shared_ocr_processor,
+            ),
         }
 
         # Track initialization state
         self._initialized = False
+        self._init_failures: Dict[str, str] = {}
 
     async def initialize(self) -> None:
         """Initialize all processors."""
         if self._initialized:
             return
 
+        # Shared processors can be referenced by multiple media keys;
+        # deduplicate instances to avoid repeated model loading.
+        unique_processors = list(dict.fromkeys(self._processors.values()))
+
         # Initialize all processors in parallel
         init_tasks = [
             processor.initialize()
-            for processor in self._processors.values()
+            for processor in unique_processors
         ]
-        await asyncio.gather(*init_tasks, return_exceptions=True)
+        init_results = await asyncio.gather(*init_tasks, return_exceptions=True)
+
+        init_errors = []
+        self._init_failures = {}
+        for processor, result in zip(unique_processors, init_results):
+            if isinstance(result, Exception):
+                processor_name = getattr(processor, "name", processor.__class__.__name__)
+                error_text = str(result)
+                init_errors.append(f"{processor_name}: {error_text}")
+                self._init_failures[processor_name] = error_text
 
         self._initialized = True
-        print("✅ 感知层所有处理器初始化完成")
+        if init_errors:
+            print("[警告] 部分处理器初始化失败: " + " | ".join(init_errors))
+        print("[信息] 感知层所有处理器初始化完成")
+
+    async def warmup(self) -> Dict[str, str]:
+        """Run lightweight warmup inference for multimodal processors."""
+        await self.initialize()
+        status: Dict[str, str] = {}
+
+        audio_processor = self._processors.get("audio")
+        audio_analyzer = getattr(audio_processor, "_fake_analyzer", None)
+        if audio_analyzer is not None:
+            try:
+                import numpy as np
+
+                dummy_audio = np.zeros(16000, dtype=np.float32)
+                await run_in_threadpool(audio_analyzer.predict, dummy_audio)
+                status["audio"] = "ok"
+            except Exception as exc:
+                status["audio"] = f"failed: {exc}"
+        else:
+            status["audio"] = "skipped"
+
+        video_processor = self._processors.get("video")
+        video_analyzer = getattr(video_processor, "_fake_analyzer", None)
+        if video_analyzer is not None:
+            try:
+                from PIL import Image
+
+                buffer = io.BytesIO()
+                Image.new("RGB", (224, 224), color=(0, 0, 0)).save(buffer, format="JPEG")
+                await run_in_threadpool(video_analyzer._infer_from_frame_bytes, buffer.getvalue())
+                status["video"] = "ok"
+            except Exception as exc:
+                status["video"] = f"failed: {exc}"
+        else:
+            status["video"] = "skipped"
+
+        ocr_processor = self._processors.get("image")
+        ocr_backend = getattr(ocr_processor, "_ocr_processor", None)
+        if ocr_backend is not None:
+            temp_path = None
+            try:
+                from PIL import Image
+
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+                    temp_path = temp_file.name
+                Image.new("RGB", (128, 64), color=(255, 255, 255)).save(temp_path, format="PNG")
+                await ocr_backend.process_keyframes([temp_path])
+                status["ocr"] = "ok"
+            except Exception as exc:
+                status["ocr"] = f"failed: {exc}"
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+        else:
+            status["ocr"] = "skipped"
+
+        return status
 
     async def process(
         self,
@@ -229,3 +313,14 @@ class PerceptionManager:
             List of supported type strings
         """
         return list(self._processors.keys())
+
+
+_default_manager: Optional[PerceptionManager] = None
+
+
+def get_perception_manager(config: Optional[ProcessorConfig] = None) -> PerceptionManager:
+    """Get a shared perception manager instance for graph/runtime reuse."""
+    global _default_manager
+    if _default_manager is None:
+        _default_manager = PerceptionManager(config)
+    return _default_manager

@@ -24,12 +24,18 @@ class VideoProcessor(BaseProcessor):
     2. Keyframe extraction + OCR
     """
 
-    def __init__(self, config: Optional[ProcessorConfig] = None):
+    def __init__(
+        self,
+        config: Optional[ProcessorConfig] = None,
+        shared_ocr_processor: Optional[OCRProcessor] = None,
+    ):
         super().__init__("video_processor")
         self.config = config or ProcessorConfig()
         self._fake_analyzer = None
         self._keyframe_extractor = None
-        self._ocr_processor = None
+        self._ocr_processor = shared_ocr_processor
+        self._ocr_enabled = False
+        self._ocr_init_error: Optional[str] = None
 
     @property
     def supported_types(self) -> List[str]:
@@ -44,7 +50,7 @@ class VideoProcessor(BaseProcessor):
             if str(multimodal_path) not in sys.path:
                 sys.path.insert(0, str(multimodal_path))
 
-            from video_module.video_inference import VideoFakeAnalyzer
+            from video_module.video_inference import get_shared_video_fake_analyzer
             from video_module.keyframe_extractor import KeyframeExtractor
 
             # Load fake analyzer
@@ -52,7 +58,7 @@ class VideoProcessor(BaseProcessor):
             if not model_path:
                 model_path = str(multimodal_path / "video_module" / "weights" / "final_model.pth")
 
-            self._fake_analyzer = VideoFakeAnalyzer(
+            self._fake_analyzer = get_shared_video_fake_analyzer(
                 weight_path=model_path,
                 snap_timestamp_sec=self.config.video_snap_timestamp,
             )
@@ -65,9 +71,19 @@ class VideoProcessor(BaseProcessor):
                 max_frames=self.config.keyframe_max_frames,
             )
 
-            # Create OCR processor for keyframes
-            self._ocr_processor = OCRProcessor(self.config)
-            await self._ocr_processor.initialize()
+            # Reuse the shared OCR processor when available to avoid duplicate model load.
+            if self._ocr_processor is None:
+                self._ocr_processor = OCRProcessor(self.config)
+
+            try:
+                await self._ocr_processor.initialize()
+                self._ocr_enabled = True
+                self._ocr_init_error = None
+            except Exception as exc:
+                # Keep video deepfake detector available even if OCR backend fails.
+                self._ocr_enabled = False
+                self._ocr_init_error = str(exc)
+                print(f"[警告] 视频OCR子模块初始化失败，已降级为仅深伪检测: {exc}")
 
         except Exception as e:
             print(f"[错误] 视频模型加载失败: {e}")
@@ -125,20 +141,26 @@ class VideoProcessor(BaseProcessor):
             ocr_text_content = ""
             ocr_results = []
 
-            if keyframe_paths and self._ocr_processor:
+            if (
+                keyframe_paths
+                and self._ocr_enabled
+                and self._ocr_processor
+                and getattr(self._ocr_processor, "_ocr_processor", None) is not None
+            ):
                 ocr_result = await self._ocr_processor._ocr_processor.process_keyframes(keyframe_paths)
 
-                if "details" in ocr_result:
-                    from src.core.models import OCRResult
-                    for item in ocr_result["details"]:
-                        if item.get("confidence", 0) > 0.5:
-                            ocr_results.append(OCRResult(
-                                text=item.get("text", ""),
-                                confidence=item.get("confidence", 0),
-                                bbox=item.get("bbox"),
-                            ))
+                from src.core.models import OCRResult
 
-                summary = ocr_result.get("summary_texts", [])
+                for item in self._ocr_processor._extract_text_items(ocr_result):
+                    confidence = float(item.get("confidence", 0))
+                    if confidence > 0.5:
+                        ocr_results.append(OCRResult(
+                            text=str(item.get("text", "")),
+                            confidence=confidence,
+                            bbox=self._ocr_processor._normalize_bbox(item.get("bbox")),
+                        ))
+
+                summary = self._ocr_processor._extract_summary_texts(ocr_result)
                 ocr_text_content = " ".join(summary) if summary else ""
 
             # Determine if fake
@@ -166,6 +188,8 @@ class VideoProcessor(BaseProcessor):
                 metadata={
                     "keyframe_count": len(keyframe_paths),
                     "keyframe_dir": getattr(keyframe_result, 'frame_dir', None),
+                    "ocr_enabled": self._ocr_enabled,
+                    "ocr_error": self._ocr_init_error if not self._ocr_enabled else None,
                 },
             )
 

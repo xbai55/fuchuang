@@ -24,6 +24,8 @@ class OCRProcessor(BaseProcessor):
         super().__init__("ocr_processor")
         self.config = config or ProcessorConfig()
         self._ocr_processor = None
+        self._fake_analyzer = None
+        self._fake_model_error: Optional[str] = None
 
     @property
     def supported_types(self) -> List[str]:
@@ -40,11 +42,28 @@ class OCRProcessor(BaseProcessor):
                 sys.path.insert(0, str(multimodal_path))
 
             from ocr.ocr_async_processor import AsyncKeyframeOCRProcessor
+            from video_module.video_inference import get_shared_video_fake_analyzer
 
             self._ocr_processor = AsyncKeyframeOCRProcessor(
                 use_angle_cls=self.config.ocr_use_angle_cls,
                 lang=self.config.ocr_lang,
             )
+
+            # Reuse the same visual fake analyzer used by video processing.
+            model_path = self.config.video_model_path
+            if not model_path:
+                model_path = str(multimodal_path / "video_module" / "weights" / "final_model.pth")
+
+            try:
+                self._fake_analyzer = get_shared_video_fake_analyzer(
+                    weight_path=model_path,
+                    snap_timestamp_sec=self.config.video_snap_timestamp,
+                )
+                self._fake_model_error = None
+            except Exception as exc:
+                self._fake_analyzer = None
+                self._fake_model_error = str(exc)
+                print(f"[警告] 图片AI率检测模型初始化失败，将仅执行OCR: {exc}")
         except Exception as e:
             print(f"[错误] OCR模型加载失败: {e}")
             raise
@@ -80,7 +99,7 @@ class OCRProcessor(BaseProcessor):
         try:
             if media_file.type == MediaType.IMAGE:
                 # Process single image
-                ocr_result = await self._process_image(file_path)
+                ocr_result = await self._process_image(file_path, context)
             else:  # Video
                 # Process video - extract keyframes first
                 ocr_result = await self._process_video(file_path, context)
@@ -95,31 +114,97 @@ class OCRProcessor(BaseProcessor):
                 metadata={"error": str(e)},
             )
 
-    async def _process_image(self, image_path: str) -> PerceptionResult:
+    async def _process_image(
+        self,
+        image_path: str,
+        context: Optional[dict] = None,
+    ) -> PerceptionResult:
         """Process a single image."""
-        result = await self._ocr_processor.process_keyframes([image_path])
+
+        metadata: dict = {}
+        if self._fake_model_error:
+            metadata["fake_model_error"] = self._fake_model_error
+
+        context_dict = context if isinstance(context, dict) else {}
+        context_metadata = context_dict.get("metadata") if isinstance(context_dict.get("metadata"), dict) else {}
+        prefer_ai_rate = bool(context_metadata.get("prefer_ai_rate_early_warning", False))
+
+        skip_threshold_raw = context_metadata.get("image_ai_ocr_skip_threshold", 0.74)
+        try:
+            skip_threshold = float(skip_threshold_raw)
+        except (TypeError, ValueError):
+            skip_threshold = 0.74
+        skip_threshold = max(0.5, min(0.99, skip_threshold))
 
         # Extract OCR results
         ocr_results = []
         texts = []
 
-        if "details" in result:
-            for item in result["details"]:
-                if item.get("confidence", 0) > 0.5:
-                    ocr_results.append(OCRResult(
-                        text=item.get("text", ""),
-                        confidence=item.get("confidence", 0),
-                        bbox=item.get("bbox"),
-                    ))
-                    texts.append(item["text"])
+        fake_analysis = None
+        if self._fake_analyzer is not None:
+            fake_prob = await run_in_threadpool(
+                self._fake_analyzer.predict_image_path,
+                image_path,
+            )
+            fake_analysis = FakeAnalysis(
+                is_fake=bool(fake_prob > 0.6),
+                fake_probability=float(fake_prob),
+                model_used="EfficientNet-B0",
+                details={
+                    "source": "video_model_reuse_for_image",
+                    "snap_timestamp": self.config.video_snap_timestamp,
+                },
+            )
 
-        summary = result.get("summary_texts", [])
+        source_media = MediaFile(type=MediaType.IMAGE, url=image_path)
+
+        # AI-rate-priority fast path for earlier warning responsiveness.
+        if (
+            prefer_ai_rate
+            and fake_analysis is not None
+            and float(fake_analysis.fake_probability) >= skip_threshold
+        ):
+            metadata.update(
+                {
+                    "ai_rate_priority_mode": True,
+                    "ocr_skipped_due_to_high_ai_rate": True,
+                    "ocr_skip_threshold": skip_threshold,
+                }
+            )
+            return PerceptionResult(
+                text_content="",
+                fake_analysis=fake_analysis,
+                ocr_results=[],
+                metadata=metadata,
+                source_media=source_media,
+            )
+
+        result = await self._ocr_processor.process_keyframes([image_path])
+
+        for item in self._extract_text_items(result):
+            confidence = float(item.get("confidence", 0))
+            if confidence > 0.5:
+                text_value = str(item.get("text", ""))
+                ocr_results.append(OCRResult(
+                    text=text_value,
+                    confidence=confidence,
+                    bbox=self._normalize_bbox(item.get("bbox")),
+                ))
+                if text_value:
+                    texts.append(text_value)
+
+        summary = self._extract_summary_texts(result)
         text_content = " ".join(summary) if summary else " ".join(texts)
+
+        if prefer_ai_rate:
+            metadata["ai_rate_priority_mode"] = True
 
         return PerceptionResult(
             text_content=text_content,
+            fake_analysis=fake_analysis,
             ocr_results=ocr_results,
-            source_media=MediaFile(type=MediaType.IMAGE, url=image_path),
+            metadata=metadata,
+            source_media=source_media,
         )
 
     async def _process_video(
@@ -172,17 +257,19 @@ class OCRProcessor(BaseProcessor):
         ocr_results = []
         texts = []
 
-        if "details" in ocr_result:
-            for item in ocr_result["details"]:
-                if item.get("confidence", 0) > 0.5:
-                    ocr_results.append(OCRResult(
-                        text=item.get("text", ""),
-                        confidence=item.get("confidence", 0),
-                        bbox=item.get("bbox"),
-                    ))
-                    texts.append(item["text"])
+        for item in self._extract_text_items(ocr_result):
+            confidence = float(item.get("confidence", 0))
+            if confidence > 0.5:
+                text_value = str(item.get("text", ""))
+                ocr_results.append(OCRResult(
+                    text=text_value,
+                    confidence=confidence,
+                    bbox=self._normalize_bbox(item.get("bbox")),
+                ))
+                if text_value:
+                    texts.append(text_value)
 
-        summary = ocr_result.get("summary_texts", [])
+        summary = self._extract_summary_texts(ocr_result)
         text_content = " ".join(summary) if summary else " ".join(texts)
 
         return PerceptionResult(
@@ -198,3 +285,79 @@ class OCRProcessor(BaseProcessor):
     async def health_check(self) -> bool:
         """Check if OCR model is loaded."""
         return self._ocr_processor is not None
+
+    def _extract_text_items(self, ocr_result: dict) -> List[dict]:
+        """Extract normalized OCR items from legacy/new payload formats."""
+        if not isinstance(ocr_result, dict):
+            return []
+
+        if isinstance(ocr_result.get("details"), list):
+            return [item for item in ocr_result["details"] if isinstance(item, dict)]
+
+        frames_results = ocr_result.get("frames_results")
+        if not isinstance(frames_results, dict):
+            return []
+
+        items: List[dict] = []
+        for frame in frames_results.values():
+            if not isinstance(frame, dict):
+                continue
+            frame_texts = frame.get("texts")
+            if not isinstance(frame_texts, list):
+                continue
+            for item in frame_texts:
+                if isinstance(item, dict):
+                    items.append(item)
+
+        return items
+
+    def _extract_summary_texts(self, ocr_result: dict) -> List[str]:
+        if not isinstance(ocr_result, dict):
+            return []
+
+        summary = ocr_result.get("summary_texts")
+        if not isinstance(summary, list):
+            return []
+
+        texts: List[str] = []
+        for item in summary:
+            if isinstance(item, dict):
+                text_value = item.get("text")
+                if text_value:
+                    texts.append(str(text_value))
+            elif isinstance(item, str):
+                if item:
+                    texts.append(item)
+        return texts
+
+    def _normalize_bbox(self, bbox: object) -> Optional[List[int]]:
+        if bbox is None:
+            return None
+
+        if hasattr(bbox, "tolist"):
+            try:
+                bbox = bbox.tolist()
+            except Exception:
+                pass
+
+        flat: List[int] = []
+
+        def _collect(value: object) -> None:
+            if hasattr(value, "tolist"):
+                try:
+                    value = value.tolist()
+                except Exception:
+                    pass
+
+            if isinstance(value, (list, tuple)):
+                for child in value:
+                    _collect(child)
+                return
+
+            try:
+                flat.append(int(round(float(value))))
+            except Exception:
+                return
+
+        _collect(bbox)
+        return flat or None

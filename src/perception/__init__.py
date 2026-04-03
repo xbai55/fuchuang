@@ -4,11 +4,12 @@ Handles OCR, Audio, Video, and Text inputs with unified interface.
 """
 from src.perception.interfaces.base_processor import BaseProcessor
 from src.perception.models.perception_models import ProcessorConfig, ProcessingContext
-from src.perception.manager import PerceptionManager
+from src.perception.manager import PerceptionManager, get_perception_manager
 
 __all__ = [
     "BaseProcessor",
     "ProcessorConfig",
     "ProcessingContext",
     "PerceptionManager",
+    "get_perception_manager",
 ]

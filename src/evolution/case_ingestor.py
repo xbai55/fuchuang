@@ -3,10 +3,11 @@ Case ingestor for automated fraud case ingestion into vector database.
 Handles new fraud cases from various sources.
 """
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 
-from src.brain.knowledge_search import KnowledgeSearchService
+if TYPE_CHECKING:
+    from src.brain.knowledge_search import KnowledgeSearchService
 
 
 @dataclass
@@ -31,7 +32,7 @@ class CaseIngestor:
 
     def __init__(
         self,
-        knowledge_service: Optional[KnowledgeSearchService] = None,
+        knowledge_service: Optional["KnowledgeSearchService"] = None,
     ):
         """
         Initialize case ingestor.

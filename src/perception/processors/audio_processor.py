@@ -48,7 +48,11 @@ class AudioProcessor(BaseProcessor):
             self._fake_analyzer = AudioFakeAnalyzer(weight_path=model_path)
 
             # Load NLP engine (ASR + VAD)
-            self._nlp_engine = AntiFraudAudioEngine(device="cuda")
+            try:
+                self._nlp_engine = AntiFraudAudioEngine(device="cuda")
+            except Exception as engine_error:
+                self._nlp_engine = None
+                print(f"[警告] 音频ASR模型加载失败，降级为仅伪造检测: {engine_error}")
 
         except Exception as e:
             print(f"[错误] 音频模型加载失败: {e}")
@@ -118,20 +122,30 @@ class AudioProcessor(BaseProcessor):
             audio_content,
         )
 
-        # Run fake detection and ASR in parallel
-        fake_task = run_in_threadpool(
-            self._fake_analyzer.predict,
-            audio_ndarray,
-        )
-        nlp_task = run_in_threadpool(
-            self._nlp_engine.process_pipeline,
-            audio_ndarray,
-        )
+        transcribed_text = ""
+        vad_timestamps = []
 
-        fake_prob, (transcribed_text, vad_timestamps) = await asyncio.gather(
-            fake_task,
-            nlp_task,
-        )
+        if self._nlp_engine is not None:
+            # Run fake detection and ASR in parallel when ASR is available.
+            fake_task = run_in_threadpool(
+                self._fake_analyzer.predict,
+                audio_ndarray,
+            )
+            nlp_task = run_in_threadpool(
+                self._nlp_engine.process_pipeline,
+                audio_ndarray,
+            )
+
+            fake_prob, (transcribed_text, vad_timestamps) = await asyncio.gather(
+                fake_task,
+                nlp_task,
+            )
+        else:
+            # ASR dependency stack may be unavailable; keep fake detection online.
+            fake_prob = await run_in_threadpool(
+                self._fake_analyzer.predict,
+                audio_ndarray,
+            )
 
         # Determine if fake
         is_fake = fake_prob > 0.8
@@ -151,12 +165,13 @@ class AudioProcessor(BaseProcessor):
             metadata={
                 "audio_duration": len(audio_content),
                 "vad_segments": len(vad_timestamps) if vad_timestamps else 0,
+                "asr_available": self._nlp_engine is not None,
             },
         )
 
     async def health_check(self) -> bool:
         """Check if audio models are loaded."""
-        return self._fake_analyzer is not None and self._nlp_engine is not None
+        return self._fake_analyzer is not None
 
 
 # Import asyncio at module level for parallel processing

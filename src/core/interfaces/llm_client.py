@@ -161,6 +161,19 @@ class LLMClient:
             model=self.model_name,
         )
 
+    async def warmup(self, prompt: str = "仅回复OK") -> bool:
+        """Trigger a lightweight request to reduce first-token latency."""
+        try:
+            await self.achat(
+                system_prompt="你是服务预热助手，请仅返回最短确认。",
+                user_prompt=prompt,
+                parse_json=False,
+            )
+            return True
+        except Exception as exc:
+            print(f"[llm_warmup] {self.model_name} warmup failed: {exc}")
+            return False
+
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "LLMClient":
         """

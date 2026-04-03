@@ -45,9 +45,12 @@ class InterventionNode(BaseNode):
         intervention = await self.service.generate_alert_only(state)
 
         # Send guardian notification if needed
-        await self.service.guardian_notifier.notify(state, intervention)
+        guardian_notification = await self.service.guardian_notifier.notify(state, intervention)
 
-        return {"intervention": intervention}
+        return {
+            "intervention": intervention,
+            "guardian_notification": guardian_notification,
+        }
 
     def _extract_input(self, state: GlobalState) -> GlobalState:
         return state

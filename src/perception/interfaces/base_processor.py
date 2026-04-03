@@ -1,6 +1,7 @@
 """
 Base interface for all media processors.
 """
+import asyncio
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
@@ -18,6 +19,7 @@ class BaseProcessor(ABC):
     def __init__(self, name: str):
         self.name = name
         self._initialized = False
+        self._init_lock = asyncio.Lock()
 
     @property
     @abstractmethod
@@ -64,7 +66,12 @@ class BaseProcessor(ABC):
 
         This is called lazily before the first process() call.
         """
-        if not self._initialized:
+        if self._initialized:
+            return
+
+        async with self._init_lock:
+            if self._initialized:
+                return
             await self._load_models()
             self._initialized = True
 

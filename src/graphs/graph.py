@@ -1,68 +1,59 @@
 """
-Anti-Fraud Workflow Graph - PDIE Architecture
-
-Refactored graph using the new Perception-Decision-Intervention-Evolution architecture.
-This replaces the original graph with cleaner, modular node implementations.
+Anti-fraud workflow graph using the PDIE architecture.
 """
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-# Import new state model
-from src.core.models import GlobalState, RiskLevel
-
-# Import new node classes
+from src.core.models import GlobalState
 from src.graphs.nodes import (
-    PerceptionNode,
+    IntentRecognitionNode,
+    InterventionNode,
     KnowledgeSearchNode,
+    PerceptionNode,
+    ReportNode,
     RiskAssessmentNode,
     RiskDecisionNode,
-    InterventionNode,
-    ReportNode,
 )
+from src.storage.memory.memory_saver import get_memory_saver
+
+
+_graph_components = {}
 
 
 def create_graph():
-    """
-    Create the anti-fraud workflow graph.
-
-    Workflow:
-    1. Perception: Process multi-modal inputs (text, audio, image, video)
-    2. Knowledge Search: Retrieve similar cases using RAG
-    3. Risk Assessment: Evaluate fraud risk
-    4. Risk Decision: Route based on risk level
-    5. Intervention: Generate warnings and alerts
-    6. Report: Generate final report
-
-    Returns:
-        Compiled StateGraph
-    """
-    # Create node instances
+    """Create and compile the main anti-fraud workflow graph."""
     perception = PerceptionNode()
+    intent = IntentRecognitionNode()
     knowledge = KnowledgeSearchNode()
     risk = RiskAssessmentNode()
     decision = RiskDecisionNode()
     intervention = InterventionNode()
     report = ReportNode()
 
-    # Build graph
-    builder = StateGraph(GlobalState)
+    global _graph_components
+    _graph_components = {
+        "perception": perception,
+        "intent_recognition": intent,
+        "knowledge_search": knowledge,
+        "risk_assessment": risk,
+        "risk_decision": decision,
+        "intervention": intervention,
+        "report_generation": report,
+    }
 
-    # Add nodes (注意：节点名不能和 GlobalState 字段名冲突)
+    builder = StateGraph(GlobalState)
     builder.add_node("perception", perception.run)
+    builder.add_node("intent_recognition", intent.run)
     builder.add_node("knowledge_search", knowledge.run)
-    builder.add_node("risk_assessor", risk.run)  # 避免与 state.risk_assessment 冲突
+    builder.add_node("risk_assessor", risk.run)
     builder.add_node("risk_decision", decision.run)
-    builder.add_node("intervention_node", intervention.run)  # 避免与 state.intervention 冲突
+    builder.add_node("intervention_node", intervention.run)
     builder.add_node("report_generation", report.run)
 
-    # Set entry point
     builder.set_entry_point("perception")
-
-    # Add edges
-    builder.add_edge("perception", "knowledge_search")
+    builder.add_edge("perception", "intent_recognition")
+    builder.add_edge("intent_recognition", "knowledge_search")
     builder.add_edge("knowledge_search", "risk_assessor")
     builder.add_edge("risk_assessor", "risk_decision")
-
-    # Add conditional routing based on risk level
     builder.add_conditional_edges(
         source="risk_decision",
         path=lambda state: state.risk_assessment.level.value if state.risk_assessment else "low",
@@ -70,18 +61,37 @@ def create_graph():
             "low": "intervention_node",
             "medium": "intervention_node",
             "high": "intervention_node",
-        }
+        },
     )
-
-    # All risk levels go to intervention (with different handling inside)
     builder.add_edge("intervention_node", "report_generation")
     builder.add_edge("report_generation", END)
 
-    return builder.compile()
+    return builder.compile(checkpointer=get_memory_saver())
 
 
-# Create and compile the graph
-main_graph = create_graph()
+_main_graph = None
 
-# For backward compatibility
-builder = create_graph()
+
+def get_main_graph():
+    """Lazily create the compiled graph."""
+    global _main_graph
+    if _main_graph is None:
+        _main_graph = create_graph()
+    return _main_graph
+
+
+def get_graph_components():
+    """Get graph node instances used by the compiled workflow."""
+    get_main_graph()
+    return _graph_components
+
+
+class _LazyGraph:
+    """Proxy that compiles the graph only when first used."""
+
+    def __getattr__(self, name):
+        return getattr(get_main_graph(), name)
+
+
+main_graph = _LazyGraph()
+builder = main_graph

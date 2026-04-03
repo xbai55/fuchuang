@@ -22,11 +22,26 @@ class UserRole(str, Enum):
     GENERAL = "general"      # 普通用户
 
 
+class EmergencyContact(BaseModel):
+    """Emergency or guardian contact that can be linked during escalation."""
+    name: str = Field("", description="Contact name")
+    phone: str = Field("", description="Contact phone number")
+    relationship: str = Field("", description="Relationship to the user")
+    is_guardian: bool = Field(False, description="Whether this contact is the primary guardian")
+
+
 class UserContext(BaseModel):
     """User context information passed through the pipeline."""
     user_role: UserRole = Field(UserRole.GENERAL, description="User persona type")
     guardian_name: Optional[str] = Field(None, description="Guardian name for alerts")
+    guardian_phone: Optional[str] = Field(None, description="Guardian phone number for alerts")
     user_id: Optional[str] = Field(None, description="User ID")
+    notify_enabled: bool = Field(True, description="Whether notifications are enabled")
+    notify_guardian_alert: bool = Field(True, description="Whether guardian alert notifications are enabled")
+    emergency_contacts: List[EmergencyContact] = Field(
+        default_factory=list,
+        description="Emergency contacts available for escalation",
+    )
 
 
 class RiskAssessment(BaseModel):
@@ -44,6 +59,29 @@ class Intervention(BaseModel):
     guardian_alert: bool = Field(False, description="Whether to alert guardian")
     alert_reason: str = Field("", description="Reason for guardian alert")
     action_items: List[str] = Field(default_factory=list, description="Recommended actions")
+    escalation_actions: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Structured escalation actions such as hotlines and guardian contact",
+    )
+
+
+class GuardianNotification(BaseModel):
+    """Result of notifying a guardian or emergency contact."""
+    notified: bool = Field(False, description="Whether any guardian notification was dispatched")
+    dispatch_id: str = Field("", description="Notification dispatch identifier")
+    guardian_name: str = Field("", description="Guardian name")
+    guardian_phone: str = Field("", description="Guardian phone number")
+    channel: str = Field("", description="Notification channel")
+    provider: str = Field("", description="Notification provider name")
+    status: str = Field("", description="Notification delivery status")
+    provider_message_id: str = Field("", description="Provider message identifier")
+    failure_reason: str = Field("", description="Failure reason when dispatch fails")
+    message: str = Field("", description="Notification content")
+    hotline_numbers: List[str] = Field(default_factory=list, description="Suggested anti-fraud hotline numbers")
+    linked_contacts: List[EmergencyContact] = Field(
+        default_factory=list,
+        description="Contacts linked to the escalation",
+    )
 
 
 class RetrievedCase(BaseModel):
@@ -81,9 +119,11 @@ class GlobalState(BaseModel):
     )
     legal_basis: List[str] = Field(default_factory=list, description="Relevant legal references")
     risk_assessment: Optional[RiskAssessment] = Field(None, description="Risk assessment")
+    short_term_memory_summary: str = Field("", description="Summary of recent user risk context")
 
     # ============ Action Layer Output ============
     intervention: Optional[Intervention] = Field(None, description="Intervention decision")
+    guardian_notification: Optional[GuardianNotification] = Field(None, description="Guardian notification result")
 
     # ============ Final Output ============
     final_report: Optional[str] = Field(None, description="Final report text")

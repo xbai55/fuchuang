@@ -93,6 +93,24 @@ class VideoFakeAnalyzer:
             print(f"[Analyzer] Bytes Inference Error: {e}")
             return 0.0
 
+    def predict_image_path(self, image_path: str) -> float:
+        """对静态图片推理，复用视频模型预处理和分类逻辑。"""
+        try:
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+            return self._infer_from_frame_bytes(image_bytes)
+        except Exception as e:
+            print(f"[Analyzer] Image Path Inference Error: {e}")
+            return 0.0
+
+    def predict_image_bytes(self, image_bytes: bytes) -> float:
+        """对静态图片字节推理。"""
+        try:
+            return self._infer_from_frame_bytes(image_bytes)
+        except Exception as e:
+            print(f"[Analyzer] Image Bytes Inference Error: {e}")
+            return 0.0
+
     def _infer_from_frame_bytes(self, frame_bytes: bytes) -> float:
         frame_image = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
         if np.array(frame_image).std() < 2.0: return 0.0  # 黑屏检测
@@ -102,3 +120,24 @@ class VideoFakeAnalyzer:
             logits = self.model(input_tensor)
             probs = torch.softmax(logits, dim=1)
             return float(probs[0][1].item())
+
+
+_SHARED_VIDEO_ANALYZERS: dict[str, VideoFakeAnalyzer] = {}
+
+
+def get_shared_video_fake_analyzer(
+    weight_path: str,
+    input_size: int = 224,
+    snap_timestamp_sec: float = 1.0,
+) -> VideoFakeAnalyzer:
+    """Get or create a shared visual fake analyzer instance."""
+    cache_key = f"{os.path.abspath(weight_path)}|{input_size}|{snap_timestamp_sec}"
+    analyzer = _SHARED_VIDEO_ANALYZERS.get(cache_key)
+    if analyzer is None:
+        analyzer = VideoFakeAnalyzer(
+            weight_path=weight_path,
+            input_size=input_size,
+            snap_timestamp_sec=snap_timestamp_sec,
+        )
+        _SHARED_VIDEO_ANALYZERS[cache_key] = analyzer
+    return analyzer

@@ -1,77 +1,86 @@
-
-# PyCharm 配置文件
+# =========================
+# OS / IDE
+# =========================
+.DS_Store
+Thumbs.db
 .idea/
+.vscode/
+*.swp
+*.swo
 
-# Python 缓存
+# =========================
+# Python
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
-# 虚拟环境 (如果有)
+# Virtual environments
+.venv/
 venv/
 env/
-.env
 
-# 深度学习权重与大文件
+# =========================
+# JavaScript / Frontend
+# =========================
+frontend/node_modules/
+frontend/dist/
 
+# =========================
+# Flutter
+# =========================
+anti_fraud_app/.dart_tool/
+anti_fraud_app/build/
+anti_fraud_app/.flutter-plugins
+anti_fraud_app/.flutter-plugins-dependencies
+anti_fraud_app/.packages
+
+# =========================
+# Runtime files
+# =========================
+logs/
+.pids/
+.tmp/
+*.log
+*.pid
+
+# =========================
+# Databases / Local state
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+fraud_detection.db
+backend/fraud_detection.db
+
+# =========================
+# Generated RAG artifacts
+# =========================
+config/data/knowledge/raw/
+config/data/knowledge/processed/
+config/data/knowledge/index/
+
+# =========================
+# Model artifacts
+# =========================
 *.pt
+*.pth
 *.onnx
+*.ckpt
 
-# 临时音频测试文件
-*.wav
-*.mp3
-*.m4a
-
-Datasets/
-train.py
-debug.py
-
-node_modules
-dist
-.DS_Store
-*.swp
-.git/*
-__pycache__/
-*.pyc
-.venv/*
-*.o
-*.a
-/vendor
-*.egg-info/
-/.env
+# =========================
+# Environment files
+# =========================
 .env
-
-# 视频文件
-*.mp4
-*.avi
-*.mov
-*.wmv
-*.flv
-*.mkv
-*.webm
-*.m4v
-*.mpeg
-*.mpg
-*.3gp
-*.f4v
-*.rmvb
-*.vob
-
-# 归档文件
-*.iso
-*.dmg
-*.rar
-*.zip
-*.gz
-
-# 文档类也默认加入
-*.pdf
-*.docx
-*.doc
-*.xlsx
-*.xls
-*.ppt
-*.pptx
-*.xlsx
-*.csv
 

@@ -18,6 +18,7 @@ from src.brain.rag.detector import RiskDetector, SUBTYPE_ADVICE
 from src.brain.rag.retriever import FraudCaseRetriever
 from src.brain.rag.pipeline import KnowledgePipeline
 from src.brain.rag.vector_store import VectorStore, ChromaVectorStore, VectorDocument
+from src.brain.rag.auto_build import ensure_knowledge_base, get_rag_config_path
 
 __all__ = [
     # Models
@@ -39,6 +40,8 @@ __all__ = [
     "VectorStore",
     "ChromaVectorStore",
     "VectorDocument",
+    "ensure_knowledge_base",
+    "get_rag_config_path",
     # Utilities
     "SUBTYPE_ADVICE",
     "convert_search_hit_to_retrieved_case",

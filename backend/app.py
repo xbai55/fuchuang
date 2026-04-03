@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 import os
 import tempfile
+import asyncio
+import threading
 
 # ==================== 诊断标记 ====================
 print("【诊断】MAIN FILE LOADED - 正在运行正确的 main.py")
@@ -24,6 +26,40 @@ log_base_dir.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault('LOG_DIR', str(log_base_dir))
 os.environ.setdefault('APP_LOG_DIR', str(log_base_dir))
 
+
+def _configure_windows_cuda_dll_search_paths() -> None:
+    """Ensure CUDA/cuDNN runtime directories are discoverable on Windows."""
+    if sys.platform != "win32":
+        return
+
+    env_root = Path(sys.prefix)
+    candidate_dirs = [
+        env_root / "Library" / "bin",
+        env_root / "Lib" / "site-packages" / "torch" / "lib",
+    ]
+
+    current_path = os.environ.get("PATH", "")
+    existing_parts = {part.lower() for part in current_path.split(";") if part}
+
+    for directory in candidate_dirs:
+        if not directory.exists():
+            continue
+
+        dir_str = str(directory)
+        if dir_str.lower() not in existing_parts:
+            os.environ["PATH"] = f"{dir_str};" + os.environ.get("PATH", "")
+            existing_parts.add(dir_str.lower())
+
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(dir_str)
+            except OSError:
+                # Non-fatal: fallback to PATH lookup.
+                pass
+
+
+_configure_windows_cuda_dll_search_paths()
+
 # Add project root to path for src imports
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -45,19 +81,86 @@ else:
     load_dotenv(Path(__file__).parent.parent / ".env")
 
 # API 路由导入 - 融合所有功能
-from api import auth, contacts, fraud_detection, agent_chat, settings
+from api import auth, contacts, fraud_detection, agent_chat, settings, monitoring
 
 # 数据库初始化
 from database import init_db
+from src.brain.rag.auto_build import ensure_knowledge_base
+from model_warmup import warmup_models
 
 # 异常处理器
 from graph_core.exceptions import register_exception_handlers
+
+
+def _get_warmup_startup_timeout_seconds() -> float:
+    raw = os.getenv("MODEL_WARMUP_STARTUP_TIMEOUT", "8")
+    try:
+        value = float(raw)
+        return value if value > 0 else 8.0
+    except ValueError:
+        return 8.0
+
+
+def _start_warmup_daemon() -> dict:
+    state = {
+        "finished": threading.Event(),
+        "result": None,
+        "error": None,
+    }
+
+    def _worker() -> None:
+        try:
+            state["result"] = asyncio.run(warmup_models())
+        except Exception as exc:
+            state["error"] = str(exc)
+        finally:
+            state["finished"].set()
+
+    thread = threading.Thread(target=_worker, name="model-warmup", daemon=True)
+    thread.start()
+    state["thread"] = thread
+    return state
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时初始化数据库
     init_db()
+
+    # 启动时自动检查并构建 RAG 知识库（索引不存在时）
+    try:
+        rag_status = ensure_knowledge_base()
+        print(f"✅ RAG 知识库状态: {rag_status.get('status', 'unknown')}")
+        if rag_status.get("index_dir"):
+            print(f"   RAG 索引目录: {rag_status['index_dir']}")
+        if rag_status.get("message"):
+            print(f"   详情: {rag_status['message']}")
+    except Exception as e:
+        print(f"⚠️ RAG 自动构建检查失败: {e}")
+
+    warmup_state = _start_warmup_daemon()
+    app.state.model_warmup_state = warmup_state
+
+    startup_timeout = _get_warmup_startup_timeout_seconds()
+    elapsed = 0.0
+    step = 0.1
+    while elapsed < startup_timeout:
+        if warmup_state["finished"].is_set():
+            break
+        await asyncio.sleep(step)
+        elapsed += step
+
+    if warmup_state["finished"].is_set():
+        if warmup_state["error"]:
+            print(f"⚠️ 模型预热执行失败: {warmup_state['error']}")
+        else:
+            print(f"✅ 模型预热状态: {warmup_state['result']}")
+    else:
+        print(
+            f"⏳ 模型预热超过启动等待阈值 {startup_timeout:.1f}s，"
+            "已转为后台继续执行"
+        )
+
     print("✅ 数据库初始化完成")
     print("✅ 认证服务已加载")
     print("✅ 用户设置服务已加载")
@@ -67,6 +170,7 @@ async def lifespan(app: FastAPI):
     print("✅ 异步任务管理器已启动")
     print("✅ 统一响应格式已启用")
     yield
+
     # 关闭时的清理工作（如果需要）
     print("👋 服务正在关闭...")
 
@@ -157,6 +261,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["用户设置"
 app.include_router(contacts.router, prefix="/api/contacts", tags=["联系人"])
 app.include_router(fraud_detection.router, prefix="/api/fraud", tags=["反诈检测"])
 app.include_router(agent_chat.router, prefix="/api/agent", tags=["Agent 聊天"])
+app.include_router(monitoring.router, prefix="/api/monitor", tags=["模型监控"])
 
 # ==================== 诊断：打印所有注册的路由 ====================
 print("\n" + "="*60)
@@ -186,7 +291,7 @@ async def root():
     return {
         "message": "反诈预警系统 API v2.1",
         "version": "2.1.0",
-        "modules": ["认证", "用户设置", "联系人", "反诈检测", "Agent 聊天"],
+        "modules": ["认证", "用户设置", "联系人", "反诈检测", "Agent 聊天", "模型监控"],
         "features": [
             "多模态输入处理（文本/语音/图片/视频）",
             "异步任务队列",
@@ -194,7 +299,8 @@ async def root():
             "LangGraph 工作流编排",
             "智能 Agent 聊天",
             "个性化风险预警",
-            "监护人联动"
+            "监护人联动",
+            "模型监控与告警"
         ],
         "docs": "/docs",
         "health": "/health"

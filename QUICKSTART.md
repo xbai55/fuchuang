@@ -1,70 +1,89 @@
 # 快速启动指南
 
-## 环境配置
+该文档用于本地快速拉起前后端联调环境。
 
-### 1. 复制环境变量文件
+## 1. 准备环境
+
+- Python 3.10+
+- Node.js 18+
+
+## 2. 配置环境变量
+
+在仓库根目录执行：
 
 ```bash
 cp .env.example .env
 ```
 
-### 2. 编辑 .env 文件，填入你的 Kimi API Key
+Windows PowerShell：
 
-```bash
-# 编辑 .env 文件
-LLM_API_KEY=你的Kimi_API_Key
-# 其他配置保持默认即可
+```powershell
+Copy-Item .env.example .env
 ```
 
-获取 Kimi API Key:
-1. 访问 https://platform.moonshot.cn/
-2. 注册/登录账号
-3. 在"API Key 管理"中创建新 key
+编辑 `.env`，至少填写：
 
-### 3. 启动后端服务
-
-```bash
-cd backend
-python main.py
+```env
+LLM_API_KEY=your_api_key
+LLM_BASE_URL=https://api.moonshot.cn/v1
+LLM_MODEL=moonshot-v1-8k
+SECRET_KEY=replace-with-random-secret
 ```
 
-服务将在 http://localhost:8000 启动
+## 3. 安装后端依赖并启动
 
-## 支持的模型
-
-### Kimi (Moonshot) - 默认
-- `moonshot-v1-8k` - 适合短文本处理
-- `moonshot-v1-32k` - 中等长度上下文
-- `moonshot-v1-128k` - 超长上下文
-
-### OpenAI
-- `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `gpt-3.5-turbo`
-
-## 环境变量说明
-
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `LLM_API_KEY` | LLM API 密钥 | 必填 |
-| `LLM_BASE_URL` | API 基础 URL | Kimi: `https://api.moonshot.cn/v1` |
-| `LLM_MODEL` | 模型名称 | `moonshot-v1-8k` |
-| `SECRET_KEY` | 应用密钥 | 必填 |
-
-## 切换不同 LLM
-
-### 使用 OpenAI
+在仓库根目录执行：
 
 ```bash
-# .env 文件
+pip install -r requirements.txt
+python backend/app.py
+```
+
+后端地址：
+
+- API 文档：http://localhost:8000/docs
+- 健康检查：http://localhost:8000/health
+
+## 4. 启动前端
+
+新开终端执行：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+前端地址：http://localhost:5173
+
+## 5. 核验链路
+
+1. 打开前端页面并登录/注册。
+2. 进入风险识别页面发送一条测试消息。
+3. 将一张本地图片直接拖入聊天输入区，确认页面出现已挂载文件名。
+4. 在后端日志中确认检测任务已触发。
+
+## 文件拖拽注意事项
+
+- 建议优先从系统文件管理器拖拽本地文件。
+- 从飞书拖拽到网页时，浏览器可能只提供链接文本：
+	- 若链接可直接下载，前端会尝试自动转换为文件；
+	- 若被跨域或登录态限制，请先在飞书下载到本地后再拖拽上传。
+
+## 可选配置
+
+RAG 自动构建（默认开启）：
+
+```env
+RAG_AUTO_BUILD=true
+RAG_FORCE_REBUILD=false
+RAG_CONFIG_PATH=config/rag.yaml
+```
+
+切换到 OpenAI 兼容模型示例：
+
+```env
 OPENAI_API_KEY=your_openai_key
 LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4o
-```
-
-### 使用其他兼容 OpenAI 的 API
-
-```bash
-# .env 文件
-LLM_API_KEY=your_key
-LLM_BASE_URL=https://your-api-endpoint.com/v1
-LLM_MODEL=your-model-name
+LLM_MODEL=gpt-4o-mini
 ```

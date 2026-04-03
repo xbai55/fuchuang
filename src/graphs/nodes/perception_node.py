@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from src.core.interfaces import BaseNode
 from src.core.models import GlobalState, MediaFile, PerceptionResult
-from perception import PerceptionManager, ProcessingContext
+from perception import PerceptionManager, ProcessingContext, get_perception_manager
 
 
 class PerceptionNode(BaseNode):
@@ -24,7 +24,7 @@ class PerceptionNode(BaseNode):
 
     def __init__(self, perception_manager: PerceptionManager = None):
         super().__init__("perception")
-        self.manager = perception_manager or PerceptionManager()
+        self.manager = perception_manager or get_perception_manager()
 
     async def process(
         self,
@@ -63,6 +63,14 @@ class PerceptionNode(BaseNode):
             task_id=state.workflow_metadata.get("task_id"),
             user_role=state.user_context.user_role.value,
             guardian_name=state.user_context.guardian_name,
+            metadata={
+                "prefer_ai_rate_early_warning": bool(
+                    state.workflow_metadata.get("prefer_ai_rate_early_warning", False)
+                ),
+                "image_ai_probability": state.workflow_metadata.get("image_ai_probability"),
+                "image_ai_risk_level": state.workflow_metadata.get("image_ai_risk_level"),
+                "image_ai_ocr_skip_threshold": state.workflow_metadata.get("image_ai_ocr_skip_threshold"),
+            },
         )
 
         # Process all media

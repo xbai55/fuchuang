@@ -8,13 +8,20 @@ import type {
   ContactCreate,
   FraudDetectionRequest,
   FraudDetectionResponse,
+  FraudAsyncResponse,
+  FraudTask,
   ChatHistory,
+  AgentChatRequest,
+  AgentChatResponse,
+  AgentChatAsyncResponse,
+  AgentTask,
   UserSettings,
   UserProfileUpdate,
   ChangePasswordRequest
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const WS_BASE_URL = API_BASE_URL.replace(/\/$/, '').replace(/^http/i, 'ws');
 
 // 创建 axios 实例
 const api = axios.create({
@@ -169,10 +176,84 @@ export const fraudAPI = {
     return response.data.data;
   },
 
+  // 异步检测诈骗 - 返回 task_id
+  detectAsync: async (data: FraudDetectionRequest): Promise<FraudAsyncResponse> => {
+    const formData = new FormData();
+    formData.append('message', data.message);
+
+    if (data.audio_file) {
+      formData.append('audio_file', data.audio_file);
+    }
+    if (data.image_file) {
+      formData.append('image_file', data.image_file);
+    }
+    if (data.video_file) {
+      formData.append('video_file', data.video_file);
+    }
+
+    const response = await api.post<{ code: number; message: string; data: FraudAsyncResponse }>('/api/fraud/detect-async', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data.data;
+  },
+
+  // 查询任务状态（WebSocket 断开时可作为降级轮询）
+  getTaskStatus: async (taskId: string): Promise<FraudTask> => {
+    const response = await api.get<{ code: number; message: string; data: FraudTask }>(`/api/fraud/tasks/${taskId}`);
+    return response.data.data;
+  },
+
+  // 创建任务实时推送连接
+  createTaskSocket: (taskId: string): WebSocket => {
+    const token = localStorage.getItem('access_token') || '';
+    const wsUrl = `${WS_BASE_URL}/api/fraud/ws/tasks/${taskId}?token=${encodeURIComponent(token)}`;
+    return new WebSocket(wsUrl);
+  },
+
   // 获取聊天历史
   getHistory: async (): Promise<ChatHistory[]> => {
     const response = await api.get<{ code: number; message: string; data: { items: ChatHistory[] } }>('/api/fraud/history');
     return response.data.data.items;
+  },
+
+  // 删除单条聊天历史
+  deleteHistory: async (historyId: number): Promise<void> => {
+    await api.delete(`/api/fraud/history/${historyId}`);
+  },
+
+  // 清空聊天历史
+  clearHistory: async (): Promise<number> => {
+    const response = await api.delete<{ code: number; message: string; data: { deleted: number } }>('/api/fraud/history');
+    return response.data.data.deleted;
+  },
+};
+
+// ========== Agent 聊天 API ==========
+export const agentAPI = {
+  chat: async (data: AgentChatRequest): Promise<AgentChatResponse> => {
+    const response = await api.post<{ code: number; message: string; data: AgentChatResponse }>('/api/agent/chat', data);
+    return response.data.data;
+  },
+
+  // Agent 异步聊天 - 返回 task_id
+  chatAsync: async (data: AgentChatRequest): Promise<AgentChatAsyncResponse> => {
+    const response = await api.post<{ code: number; message: string; data: AgentChatAsyncResponse }>('/api/agent/chat-async', data);
+    return response.data.data;
+  },
+
+  // 查询 Agent 异步任务状态
+  getTaskStatus: async (taskId: string): Promise<AgentTask> => {
+    const response = await api.get<{ code: number; message: string; data: AgentTask }>(`/api/agent/tasks/${taskId}`);
+    return response.data.data;
+  },
+
+  // 创建 Agent 任务实时推送连接
+  createTaskSocket: (taskId: string): WebSocket => {
+    const token = localStorage.getItem('access_token') || '';
+    const wsUrl = `${WS_BASE_URL}/api/agent/ws/tasks/${taskId}?token=${encodeURIComponent(token)}`;
+    return new WebSocket(wsUrl);
   },
 };
 

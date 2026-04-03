@@ -2,6 +2,7 @@
 增强版 Knowledge Search Service
 集成 RAG 检索和风险检测能力
 """
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from src.core.models.state import GlobalState, RetrievedCase
@@ -10,6 +11,8 @@ from src.brain.rag.detector import RiskDetector
 from src.brain.rag.models import RiskAssessmentResult, create_search_hit_from_retrieved_case
 from src.brain.rag.vector_store import ChromaVectorStore
 from src.brain.rag.indexer import SimilarityIndex
+from src.brain.rag.auto_build import ensure_knowledge_base, get_rag_config_path
+from src.brain.rag.config import load_rag_config
 
 
 class KnowledgeSearchService:
@@ -84,24 +87,62 @@ class KnowledgeSearchService:
         Returns:
             FraudCaseRetriever 实例
         """
+        configured_backend = "hybrid"
+        chroma_persist_directory = "./data/vector_store"
+
+        # 自动发现配置并按需构建知识库
+        if not tfidf_index_path:
+            try:
+                config_path = get_rag_config_path()
+                if config_path.exists():
+                    ensure_status = ensure_knowledge_base(config_path)
+                    config = load_rag_config(config_path)
+
+                    configured_backend = config.index.backend
+                    tfidf_index_path = str(config.paths.index_dir)
+                    chroma_persist_directory = str(config.paths.index_dir / "chromadb")
+
+                    print(
+                        f"[RAG] 自动建库状态: {ensure_status.get('status')} | "
+                        f"索引目录: {config.paths.index_dir}"
+                    )
+            except Exception as e:
+                print(f"[警告] RAG 自动构建初始化失败: {e}")
+
         # 加载 TF-IDF 索引（如果路径提供）
         tfidf_index = None
         if tfidf_index_path:
             try:
-                from pathlib import Path
                 tfidf_index = SimilarityIndex.load(Path(tfidf_index_path))
             except Exception as e:
                 print(f"[警告] 加载 TF-IDF 索引失败: {e}")
 
         # 创建 ChromaDB 存储（如果未提供）
         if vector_store is None:
-            vector_store = ChromaVectorStore(
-                collection_name="fraud_cases",
-                persist_directory="./data/vector_store",
-            )
+            should_enable_vector = configured_backend in ("hybrid", "sentence-transformer") or tfidf_index is None
+            if should_enable_vector:
+                vector_store = ChromaVectorStore(
+                    collection_name="fraud_cases",
+                    persist_directory=chroma_persist_directory,
+                )
 
         # 判断是否使用混合模式
-        use_hybrid = tfidf_index is not None and vector_store is not None
+        use_hybrid = (
+            configured_backend == "hybrid"
+            and tfidf_index is not None
+            and vector_store is not None
+        )
+
+        # sentence-transformer 模式下不做融合，仅走向量检索
+        if configured_backend == "sentence-transformer":
+            use_hybrid = False
+
+        # 兜底：如果没有 TF-IDF 也没有向量库，创建默认向量库避免完全失效
+        if vector_store is None and tfidf_index is None:
+            vector_store = ChromaVectorStore(
+                collection_name="fraud_cases",
+                persist_directory=chroma_persist_directory,
+            )
 
         return FraudCaseRetriever(
             vector_store=vector_store,

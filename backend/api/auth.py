@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from pydantic import BaseModel
+from typing import Optional
 from database import get_db, User
 from schemas import UserCreate, UserResponse
 from schemas.response import success_response, error_response, ResponseCode
@@ -17,6 +19,11 @@ from auth import (
 )
 
 router = APIRouter()
+
+
+class UserMeUpdate(BaseModel):
+    user_role: Optional[str] = None
+    guardian_name: Optional[str] = None
 
 
 @router.post("/register")
@@ -162,16 +169,22 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
 
 @router.put("/me")
 async def update_user_profile(
-    user_role: str = None,
-    guardian_name: str = None,
+    update_data: Optional[UserMeUpdate] = Body(default=None),
+    user_role: Optional[str] = Query(default=None),
+    guardian_name: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """更新用户信息"""
-    if user_role is not None:
-        current_user.user_role = user_role
-    if guardian_name is not None:
-        current_user.guardian_name = guardian_name
+    resolved_user_role = update_data.user_role if update_data and update_data.user_role is not None else user_role
+    resolved_guardian_name = (
+        update_data.guardian_name if update_data and update_data.guardian_name is not None else guardian_name
+    )
+
+    if resolved_user_role is not None:
+        current_user.user_role = resolved_user_role
+    if resolved_guardian_name is not None:
+        current_user.guardian_name = resolved_guardian_name
 
     db.commit()
     db.refresh(current_user)

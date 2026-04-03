@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from collections import deque
+from threading import RLock
 
 
 @dataclass
@@ -42,6 +43,7 @@ class ModelMonitor:
         self._metrics: Dict[str, ModelMetrics] = {}
         self._latency_history: Dict[str, deque] = {}
         self._max_history = max_history
+        self._lock = RLock()
 
     async def record_request(
         self,
@@ -59,33 +61,34 @@ class ModelMonitor:
             success: Whether the request succeeded
             error: Error message if failed
         """
-        # Initialize metrics if needed
-        if model_name not in self._metrics:
-            self._metrics[model_name] = ModelMetrics(model_name=model_name)
-            self._latency_history[model_name] = deque(maxlen=self._max_history)
+        with self._lock:
+            # Initialize metrics if needed
+            if model_name not in self._metrics:
+                self._metrics[model_name] = ModelMetrics(model_name=model_name)
+                self._latency_history[model_name] = deque(maxlen=self._max_history)
 
-        metrics = self._metrics[model_name]
-        metrics.total_requests += 1
+            metrics = self._metrics[model_name]
+            metrics.total_requests += 1
 
-        if success:
-            metrics.successful_requests += 1
-        else:
-            metrics.failed_requests += 1
-            if error:
-                metrics.errors.append(f"{datetime.now().isoformat()}: {error}")
-                # Keep only recent errors
-                metrics.errors = metrics.errors[-100:]
+            if success:
+                metrics.successful_requests += 1
+            else:
+                metrics.failed_requests += 1
+                if error:
+                    metrics.errors.append(f"{datetime.now().isoformat()}: {error}")
+                    # Keep only recent errors
+                    metrics.errors = metrics.errors[-100:]
 
-        # Record latency
-        self._latency_history[model_name].append(latency_ms)
+            # Record latency
+            self._latency_history[model_name].append(latency_ms)
 
-        # Update latency statistics
-        latencies = list(self._latency_history[model_name])
-        if latencies:
-            metrics.avg_latency_ms = sum(latencies) / len(latencies)
-            metrics.p95_latency_ms = self._calculate_p95(latencies)
+            # Update latency statistics
+            latencies = list(self._latency_history[model_name])
+            if latencies:
+                metrics.avg_latency_ms = sum(latencies) / len(latencies)
+                metrics.p95_latency_ms = self._calculate_p95(latencies)
 
-        metrics.last_check = datetime.now()
+            metrics.last_check = datetime.now()
 
     def _calculate_p95(self, values: List[float]) -> float:
         """
@@ -113,16 +116,17 @@ class ModelMonitor:
         Returns:
             Metrics dictionary
         """
-        if model_name:
-            metrics = self._metrics.get(model_name)
-            if not metrics:
-                return {}
-            return self._format_metrics(metrics)
+        with self._lock:
+            if model_name:
+                metrics = self._metrics.get(model_name)
+                if not metrics:
+                    return {}
+                return self._format_metrics(metrics)
 
-        return {
-            name: self._format_metrics(m)
-            for name, m in self._metrics.items()
-        }
+            return {
+                name: self._format_metrics(m)
+                for name, m in self._metrics.items()
+            }
 
     def _format_metrics(self, metrics: ModelMetrics) -> Dict[str, Any]:
         """
@@ -153,20 +157,21 @@ class ModelMonitor:
         Returns:
             Dict mapping model name to health status
         """
-        status = {}
+        with self._lock:
+            status = {}
 
-        for name, metrics in self._metrics.items():
-            # Determine health status
-            if metrics.total_requests == 0:
-                status[name] = "unknown"
-            elif metrics.failed_requests / metrics.total_requests > 0.1:
-                status[name] = "degraded"
-            elif metrics.p95_latency_ms > 5000:  # 5 seconds
-                status[name] = "slow"
-            else:
-                status[name] = "healthy"
+            for name, metrics in self._metrics.items():
+                # Determine health status
+                if metrics.total_requests == 0:
+                    status[name] = "unknown"
+                elif metrics.failed_requests / metrics.total_requests > 0.1:
+                    status[name] = "degraded"
+                elif metrics.p95_latency_ms > 5000:  # 5 seconds
+                    status[name] = "slow"
+                else:
+                    status[name] = "healthy"
 
-        return status
+            return status
 
     def check_alerts(self) -> List[Dict[str, Any]]:
         """
@@ -175,41 +180,55 @@ class ModelMonitor:
         Returns:
             List of alerts
         """
-        alerts = []
+        with self._lock:
+            alerts = []
 
-        for name, metrics in self._metrics.items():
-            # Check error rate
-            if metrics.total_requests > 0:
-                error_rate = metrics.failed_requests / metrics.total_requests
-                if error_rate > 0.2:
+            for name, metrics in self._metrics.items():
+                # Check error rate
+                if metrics.total_requests > 0:
+                    error_rate = metrics.failed_requests / metrics.total_requests
+                    if error_rate > 0.2:
+                        alerts.append({
+                            "severity": "high",
+                            "model": name,
+                            "rule": "error_rate_high",
+                            "metric": "error_rate",
+                            "value": round(error_rate, 4),
+                            "threshold": 0.2,
+                            "message": f"High error rate: {error_rate:.1%}",
+                            "timestamp": datetime.now().isoformat(),
+                        })
+
+                # Check latency
+                if metrics.p95_latency_ms > 8000:  # 8 seconds
                     alerts.append({
-                        "severity": "high",
+                        "severity": "medium",
                         "model": name,
-                        "message": f"High error rate: {error_rate:.1%}",
+                        "rule": "p95_latency_high",
+                        "metric": "p95_latency_ms",
+                        "value": round(metrics.p95_latency_ms, 2),
+                        "threshold": 8000,
+                        "message": f"High P95 latency: {metrics.p95_latency_ms:.0f}ms",
                         "timestamp": datetime.now().isoformat(),
                     })
 
-            # Check latency
-            if metrics.p95_latency_ms > 8000:  # 8 seconds
-                alerts.append({
-                    "severity": "medium",
-                    "model": name,
-                    "message": f"High P95 latency: {metrics.p95_latency_ms:.0f}ms",
-                    "timestamp": datetime.now().isoformat(),
-                })
+                # Check staleness
+                if metrics.last_check:
+                    stale_threshold = timedelta(minutes=30)
+                    stale_minutes = (datetime.now() - metrics.last_check).total_seconds() / 60
+                    if datetime.now() - metrics.last_check > stale_threshold:
+                        alerts.append({
+                            "severity": "low",
+                            "model": name,
+                            "rule": "request_stale",
+                            "metric": "minutes_since_last_request",
+                            "value": round(stale_minutes, 2),
+                            "threshold": 30,
+                            "message": "No recent requests",
+                            "timestamp": datetime.now().isoformat(),
+                        })
 
-            # Check staleness
-            if metrics.last_check:
-                stale_threshold = timedelta(minutes=30)
-                if datetime.now() - metrics.last_check > stale_threshold:
-                    alerts.append({
-                        "severity": "low",
-                        "model": name,
-                        "message": "No recent requests",
-                        "timestamp": datetime.now().isoformat(),
-                    })
-
-        return alerts
+            return alerts
 
     def get_summary(self) -> Dict[str, Any]:
         """
@@ -218,18 +237,19 @@ class ModelMonitor:
         Returns:
             Summary dictionary
         """
-        total_requests = sum(m.total_requests for m in self._metrics.values())
-        total_success = sum(m.successful_requests for m in self._metrics.values())
+        with self._lock:
+            total_requests = sum(m.total_requests for m in self._metrics.values())
+            total_success = sum(m.successful_requests for m in self._metrics.values())
 
-        all_latencies = []
-        for history in self._latency_history.values():
-            all_latencies.extend(history)
+            all_latencies = []
+            for history in self._latency_history.values():
+                all_latencies.extend(history)
 
-        return {
-            "total_models": len(self._metrics),
-            "total_requests": total_requests,
-            "overall_success_rate": total_success / total_requests if total_requests > 0 else 0,
-            "overall_avg_latency_ms": round(sum(all_latencies) / len(all_latencies), 2) if all_latencies else 0,
-            "health_status": self.get_health_status(),
-            "active_alerts": len(self.check_alerts()),
-        }
+            return {
+                "total_models": len(self._metrics),
+                "total_requests": total_requests,
+                "overall_success_rate": total_success / total_requests if total_requests > 0 else 0,
+                "overall_avg_latency_ms": round(sum(all_latencies) / len(all_latencies), 2) if all_latencies else 0,
+                "health_status": self.get_health_status(),
+                "active_alerts": len(self.check_alerts()),
+            }

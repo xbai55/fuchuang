@@ -93,6 +93,120 @@ export interface FraudDetectionResponse {
   guardian_alert: boolean;
 }
 
+export interface FraudEarlyWarning {
+  risk_score: number;
+  risk_level: 'low' | 'medium' | 'high';
+  warning_message: string;
+  risk_clues?: string[];
+  source?: string;
+  is_preliminary?: boolean;
+}
+
+export type FraudTaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'timeout';
+
+export interface FraudTask {
+  task_id: string;
+  status: FraudTaskStatus;
+  progress: number;
+  result?: FraudDetectionResponse | null;
+  error?: string | null;
+  created_at: number;
+  started_at?: number | null;
+  completed_at?: number | null;
+  elapsed_time: number;
+  input_summary: string;
+}
+
+export interface FraudAsyncResponse {
+  task_id: string;
+  status: FraudTaskStatus;
+  estimated_time: number;
+  poll_url: string;
+  ws_url: string;
+  early_warning?: FraudEarlyWarning | null;
+}
+
+export interface FraudTaskWsMessage {
+  event:
+    | 'connected'
+    | 'task_update'
+    | 'task_completed'
+    | 'task_failed'
+    | 'error'
+    | 'report_stream_started'
+    | 'report_chunk'
+    | 'report_stream_finished';
+  task_id: string;
+  task?: FraudTask;
+  result?: FraudDetectionResponse;
+  error?: string;
+  message?: string;
+  seq?: number;
+  timestamp?: number;
+  chunk?: string;
+  chunk_index?: number;
+  total_chunks?: number;
+  done?: boolean;
+}
+
+export interface AgentChatRequest {
+  message: string;
+  conversation_id?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface AgentChatResponse {
+  message: string;
+  suggestions: string[];
+  tool_calls: Array<Record<string, unknown>>;
+  conversation_id: string;
+}
+
+export type AgentTaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'timeout';
+
+export interface AgentTask {
+  task_id: string;
+  status: AgentTaskStatus;
+  progress: number;
+  result?: AgentChatResponse | null;
+  error?: string | null;
+  created_at: number;
+  started_at?: number | null;
+  completed_at?: number | null;
+  elapsed_time: number;
+  input_summary: string;
+}
+
+export interface AgentChatAsyncResponse {
+  task_id: string;
+  status: AgentTaskStatus;
+  estimated_time: number;
+  poll_url: string;
+  ws_url: string;
+}
+
+export interface AgentTaskWsMessage {
+  event:
+    | 'connected'
+    | 'task_update'
+    | 'task_completed'
+    | 'task_failed'
+    | 'error'
+    | 'agent_stream_started'
+    | 'agent_chunk'
+    | 'agent_stream_finished';
+  task_id: string;
+  task?: AgentTask;
+  result?: AgentChatResponse;
+  error?: string;
+  message?: string;
+  seq?: number;
+  timestamp?: number;
+  chunk?: string;
+  chunk_index?: number;
+  total_chunks?: number;
+}
+
 // 聊天历史类型
 export interface ChatHistory {
   id: number;
@@ -101,6 +215,7 @@ export interface ChatHistory {
   risk_score: number;
   risk_level: string;
   scam_type: string;
+  chat_mode?: 'fraud' | 'agent';
   guardian_alert: boolean;
   created_at: string;
 }

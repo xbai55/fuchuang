@@ -29,7 +29,7 @@ DEFAULT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "model": DEFAULT_MODEL,
         "temperature": 0.3,
         "max_tokens": 2000,
-        "timeout": 30,
+        "timeout": 90,
     },
 }
 

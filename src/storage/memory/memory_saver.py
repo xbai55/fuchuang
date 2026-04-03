@@ -1,12 +1,24 @@
-import psycopg
-from psycopg_pool import AsyncConnectionPool
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from typing import Optional, Union
+from typing import Any, Optional
 import logging
 import time
+
+try:
+    import psycopg
+    from psycopg_pool import AsyncConnectionPool
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    _POSTGRES_AVAILABLE = True
+    _POSTGRES_IMPORT_ERROR = None
+except Exception as import_error:
+    psycopg = None
+    AsyncConnectionPool = None
+    PostgresSaver = None
+    AsyncPostgresSaver = None
+    _POSTGRES_AVAILABLE = False
+    _POSTGRES_IMPORT_ERROR = import_error
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +31,8 @@ class MemoryManager:
     """Memory Manager 单例类"""
 
     _instance: Optional['MemoryManager'] = None
-    _checkpointer: Optional[Union[AsyncPostgresSaver, MemorySaver]] = None
-    _pool: Optional[AsyncConnectionPool] = None
+    _checkpointer: Optional[BaseCheckpointSaver] = None
+    _pool: Optional[Any] = None
     _setup_done: bool = False
 
     def __new__(cls):
@@ -28,8 +40,12 @@ class MemoryManager:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def _connect_with_retry(self, db_url: str) -> Optional[psycopg.Connection]:
+    def _connect_with_retry(self, db_url: str) -> Optional[Any]:
         """带重试的数据库连接，每次 15 秒超时，共尝试 2 次"""
+        if not _POSTGRES_AVAILABLE:
+            logger.warning("PostgreSQL dependencies are unavailable: %s", _POSTGRES_IMPORT_ERROR)
+            return None
+
         last_error = None
         for attempt in range(1, DB_MAX_RETRIES + 1):
             try:
@@ -49,6 +65,10 @@ class MemoryManager:
         """同步创建 schema 和表（只执行一次），返回是否成功"""
         if self._setup_done:
             return True
+
+        if not _POSTGRES_AVAILABLE:
+            logger.warning("PostgreSQL checkpoint dependencies unavailable, skip schema setup")
+            return False
 
         conn = self._connect_with_retry(db_url)
         if conn is None:
@@ -91,6 +111,13 @@ class MemoryManager:
         """获取 checkpointer，优先使用 PostgresSaver，失败时退化为 MemorySaver"""
         if self._checkpointer is not None:
             return self._checkpointer
+
+        if not _POSTGRES_AVAILABLE:
+            logger.warning(
+                "PostgreSQL checkpoint dependencies unavailable (%s), falling back to MemorySaver",
+                _POSTGRES_IMPORT_ERROR,
+            )
+            return self._create_fallback_checkpointer()
 
         # 1. 尝试获取 db_url
         db_url = self._get_db_url_safe()

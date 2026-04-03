@@ -54,6 +54,7 @@ class InterventionService:
 
         # Send guardian notification if needed
         notification_result = await self.guardian_notifier.notify(state, intervention)
+        state.guardian_notification = notification_result
 
         # Generate report
         report = await self.report_generator.generate(state)
@@ -61,7 +62,7 @@ class InterventionService:
 
         return {
             "intervention": intervention,
-            "notification": notification_result,
+            "guardian_notification": notification_result,
             "report": report,
         }
 

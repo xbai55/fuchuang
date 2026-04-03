@@ -5,8 +5,10 @@ from src.core.models.media import MediaFile, MediaType, PerceptionResult, FakeAn
 from src.core.models.state import (
     GlobalState,
     UserContext,
+    EmergencyContact,
     RiskAssessment,
     Intervention,
+    GuardianNotification,
     RiskLevel,
     UserRole,
     RetrievedCase,
@@ -22,8 +24,11 @@ __all__ = [
     # State models
     "GlobalState",
     "UserContext",
+    "EmergencyContact",
     "RiskAssessment",
     "Intervention",
+    "GuardianNotification",
     "RiskLevel",
     "UserRole",
+    "RetrievedCase",
 ]

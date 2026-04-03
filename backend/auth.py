@@ -20,7 +20,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # 密码加密
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt_sha256", "bcrypt"],
+    deprecated="auto",
+)
 
 # OAuth2 密码流
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -37,7 +40,10 @@ class TokenData:
 # ==================== 密码工具 ====================
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except ValueError:
+        return False
 
 
 def get_password_hash(password: str) -> str:

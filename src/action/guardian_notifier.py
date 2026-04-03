@@ -1,138 +1,176 @@
 """
 Guardian notifier for high-risk alerts.
-Handles notification to guardians when high fraud risk is detected.
 """
-from typing import Dict, Any, Optional
+from datetime import datetime
+from typing import List
+from uuid import uuid4
 
-from src.core.models import GlobalState, Intervention, RiskLevel
+from src.core.models import (
+    EmergencyContact,
+    GlobalState,
+    GuardianNotification,
+    Intervention,
+    RiskLevel,
+)
+from src.action.sms_service import SmsNotificationService
 
 
 class GuardianNotifier:
-    """
-    Notifies guardians when high-risk fraud is detected.
+    """Builds structured guardian and emergency escalation records."""
 
-    Currently logs alerts; can be extended to send SMS, email, etc.
-    """
+    HOTLINE_NUMBERS = ["110", "96110"]
 
     def __init__(self):
-        """Initialize guardian notifier."""
-        self._alert_history: list = []
+        self._alert_history: List[dict] = []
+        self.sms_service = SmsNotificationService()
 
     async def notify(
         self,
         state: GlobalState,
         intervention: Intervention,
-    ) -> Dict[str, Any]:
-        """
-        Send notification to guardian if alert is triggered.
-
-        Args:
-            state: Current workflow state
-            intervention: Intervention result with alert flag
-
-        Returns:
-            Notification result
-        """
+    ) -> GuardianNotification:
         if not intervention.guardian_alert:
-            return {"notified": False, "reason": "Alert not triggered"}
+            return GuardianNotification(
+                notified=False,
+                status="not_triggered",
+                hotline_numbers=self.HOTLINE_NUMBERS,
+            )
 
-        guardian_name = state.user_context.guardian_name
-        if not guardian_name:
-            return {"notified": False, "reason": "No guardian configured"}
+        if not (state.user_context.notify_enabled and state.user_context.notify_guardian_alert):
+            return GuardianNotification(
+                notified=False,
+                channel="sms",
+                provider=self.sms_service.provider_name,
+                status="disabled",
+                failure_reason="Guardian SMS notifications are disabled in user settings.",
+                hotline_numbers=self.HOTLINE_NUMBERS,
+            )
 
-        # Build notification message
-        message = self._build_notification_message(state, intervention)
+        contacts = self._resolve_contacts(state)
+        if not contacts:
+            return GuardianNotification(
+                notified=False,
+                channel="sms",
+                provider=self.sms_service.provider_name,
+                status="no_contact",
+                failure_reason="No guardian or emergency contact is configured.",
+                message="No guardian or emergency contact is configured.",
+                hotline_numbers=self.HOTLINE_NUMBERS,
+            )
 
-        # Log the alert (in production, send SMS/email)
-        alert_record = {
-            "guardian": guardian_name,
-            "user_role": state.user_context.user_role.value,
-            "risk_score": state.risk_assessment.score if state.risk_assessment else 0,
-            "message": message,
-            "alert_reason": intervention.alert_reason,
-        }
-        self._alert_history.append(alert_record)
+        primary = next((contact for contact in contacts if contact.phone), None)
+        if primary is None:
+            return GuardianNotification(
+                notified=False,
+                channel="sms",
+                provider=self.sms_service.provider_name,
+                status="missing_phone",
+                failure_reason="Guardian or emergency contact exists but no phone number is available.",
+                hotline_numbers=self.HOTLINE_NUMBERS,
+                linked_contacts=contacts,
+            )
 
-        # TODO: Implement actual notification (SMS, email, push)
-        print(f"[监护人通知] 发送给 {guardian_name}: {message[:100]}...")
+        message = self._build_notification_message(state, intervention, primary)
+        sms_result = await self.sms_service.send_guardian_alert(
+            phone_number=primary.phone,
+            message_payload=self._build_message_payload(state, intervention),
+        )
+        notification = GuardianNotification(
+            notified=sms_result.success,
+            dispatch_id=f"dispatch_{uuid4().hex[:12]}",
+            guardian_name=primary.name,
+            guardian_phone=primary.phone,
+            channel="sms",
+            provider=sms_result.provider,
+            status=sms_result.status,
+            provider_message_id=sms_result.provider_message_id or sms_result.request_id,
+            failure_reason=sms_result.error,
+            message=message,
+            hotline_numbers=self.HOTLINE_NUMBERS,
+            linked_contacts=contacts,
+        )
 
-        return {
-            "notified": True,
-            "guardian": guardian_name,
-            "message": message,
-        }
+        self._alert_history.append(
+            {
+                "timestamp": datetime.utcnow().isoformat(),
+                "dispatch_id": notification.dispatch_id,
+                "guardian_name": notification.guardian_name,
+                "guardian_phone": notification.guardian_phone,
+                "risk_level": state.risk_assessment.level.value if state.risk_assessment else "unknown",
+                "risk_score": state.risk_assessment.score if state.risk_assessment else 0,
+                "status": notification.status,
+                "provider": notification.provider,
+                "provider_message_id": notification.provider_message_id,
+                "failure_reason": notification.failure_reason,
+            }
+        )
+        print(
+            f"[guardian_notifier] sms {notification.status} "
+            f"{notification.dispatch_id} -> {notification.guardian_phone}"
+        )
+        return notification
+
+    def _resolve_contacts(self, state: GlobalState) -> List[EmergencyContact]:
+        contacts: List[EmergencyContact] = []
+        if state.user_context.guardian_name or state.user_context.guardian_phone:
+            contacts.append(
+                EmergencyContact(
+                    name=state.user_context.guardian_name or "Guardian",
+                    phone=state.user_context.guardian_phone or "",
+                    relationship="guardian",
+                    is_guardian=True,
+                )
+            )
+
+        for contact in state.user_context.emergency_contacts:
+            if not any(existing.phone == contact.phone for existing in contacts if existing.phone):
+                contacts.append(contact)
+
+        contacts.sort(key=lambda item: (not item.is_guardian, item.name))
+        return contacts
 
     def _build_notification_message(
         self,
         state: GlobalState,
         intervention: Intervention,
+        contact: EmergencyContact,
     ) -> str:
-        """
-        Build notification message for guardian.
-
-        Args:
-            state: Global state
-            intervention: Intervention result
-
-        Returns:
-            Notification message
-        """
         risk = state.risk_assessment
-        user_role = state.user_context.user_role.value
+        return (
+            f"User role: {state.user_context.user_role.value}\n"
+            f"Guardian/contact: {contact.name} ({contact.phone or 'no-phone'})\n"
+            f"Risk level: {risk.level.value if risk else 'unknown'}\n"
+            f"Risk score: {risk.score if risk else 0}/100\n"
+            f"Scam type: {risk.scam_type if risk and risk.scam_type else 'unknown'}\n"
+            f"Reason: {intervention.alert_reason or 'High-risk anti-fraud escalation triggered.'}\n"
+            f"Recommended hotlines: {', '.join(self.HOTLINE_NUMBERS)}"
+        )
 
-        parts = [
-            f"【反诈预警】您的{user_role}家属可能遭遇诈骗！",
-            f"",
-            f"风险等级: {risk.level.value if risk else 'unknown'}",
-            f"风险分数: {risk.score if risk else 0}/100",
-            f"诈骗类型: {risk.scam_type if risk else 'unknown'}",
-            f"",
-            f"预警原因: {intervention.alert_reason}",
-            f"",
-            f"建议立即联系家属确认情况。",
-        ]
-
-        return "\n".join(parts)
-
-    def get_alert_history(self) -> list:
-        """
-        Get alert history.
-
-        Returns:
-            List of alert records
-        """
-        return self._alert_history.copy()
-
-    async def should_notify(
+    def _build_message_payload(
         self,
         state: GlobalState,
-    ) -> bool:
-        """
-        Determine if notification should be sent.
+        intervention: Intervention,
+    ) -> dict:
+        risk = state.risk_assessment
+        return {
+            "userRole": state.user_context.user_role.value,
+            "riskLevel": risk.level.value if risk else "unknown",
+            "riskScore": str(risk.score if risk else 0),
+            "scamType": risk.scam_type if risk and risk.scam_type else "unknown",
+            "alertReason": intervention.alert_reason or "High-risk anti-fraud escalation triggered.",
+            "hotline": "/".join(self.HOTLINE_NUMBERS),
+        }
 
-        Args:
-            state: Current workflow state
+    def get_alert_history(self) -> list:
+        return self._alert_history.copy()
 
-        Returns:
-            True if should notify
-        """
-        # Must have guardian configured
-        if not state.user_context.guardian_name:
+    async def should_notify(self, state: GlobalState) -> bool:
+        if not state.user_context.notify_enabled or not state.user_context.notify_guardian_alert:
             return False
-
-        # Must have risk assessment
+        if not self._resolve_contacts(state):
+            return False
         if not state.risk_assessment:
             return False
-
-        # High risk always notifies
         if state.risk_assessment.level == RiskLevel.HIGH:
             return True
-
-        # Medium risk may notify depending on context
-        if state.risk_assessment.level == RiskLevel.MEDIUM:
-            # Check for specific high-risk indicators
-            for result in state.perception_results:
-                if result.fake_analysis and result.fake_analysis.is_fake:
-                    return True
-
-        return False
+        return state.risk_assessment.level == RiskLevel.MEDIUM and state.risk_assessment.score >= 60

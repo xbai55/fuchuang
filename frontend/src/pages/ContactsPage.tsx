@@ -1,26 +1,52 @@
-import { useState, useEffect } from 'react';
-import { Layout, Button, Modal, Form, Input, Select, message, List, Popconfirm, Tag, Empty } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, PhoneOutlined } from '@ant-design/icons';
+import { useEffect, useState } from 'react';
+import { App, Button, Checkbox, Col, Empty, Form, Input, List, Modal, Popconfirm, Row, Select, Tag } from 'antd';
+import { DeleteOutlined, EditOutlined, PhoneOutlined, PlusOutlined } from '@ant-design/icons';
 import { contactsAPI } from '../services/api';
+import { useI18n } from '../i18n';
+import { maskPhone, maskUsername, USER_SETTINGS_CHANGED_EVENT } from '../utils/privacy';
+import { storage } from '../utils/storage';
 import type { Contact, ContactCreate } from '../types';
-import Sidebar from '../components/Sidebar';
-
-const { Content } = Layout;
 
 interface ContactsPageProps {
   onPageChange: (page: 'chat' | 'contacts') => void;
 }
 
-export default function ContactsPage({ onPageChange }: ContactsPageProps) {
+type ContactFormValues = ContactCreate;
+
+type ApiError = {
+  response?: {
+    data?: {
+      detail?: string;
+      message?: string;
+    };
+  };
+};
+
+export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPageProps) {
+  const { message } = App.useApp();
+  const { isZh } = useI18n();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [form] = Form.useForm();
+  const [privacyMode, setPrivacyMode] = useState<boolean>(() => storage.getUser()?.privacy_mode ?? false);
+  const [form] = Form.useForm<ContactFormValues>();
 
-  useEffect(() => {
-    loadContacts();
-  }, []);
+  const t = (zh: string, en: string) => (isZh ? zh : en);
+
+  const relationshipLabels: Record<string, string> = {
+    family: t('家人', 'Family'),
+    friend: t('朋友', 'Friend'),
+    coworker: t('同事', 'Coworker'),
+    other: t('其他', 'Other'),
+  };
+
+  const relationshipTagColors: Record<string, string> = {
+    family: 'gold',
+    friend: 'blue',
+    coworker: 'purple',
+    other: 'default',
+  };
 
   const loadContacts = async () => {
     setLoading(true);
@@ -28,128 +54,151 @@ export default function ContactsPage({ onPageChange }: ContactsPageProps) {
       const data = await contactsAPI.getContacts();
       setContacts(data);
     } catch (error) {
-      message.error('加载联系人失败');
+      const apiError = error as ApiError;
+      const errorMsg =
+        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('加载联系人失败', 'Failed to load contacts');
+      message.error(errorMsg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAdd = () => {
+  useEffect(() => {
+    void loadContacts();
+  }, []);
+
+  useEffect(() => {
+    const syncPrivacy = () => {
+      setPrivacyMode(storage.getUser()?.privacy_mode ?? false);
+    };
+
+    window.addEventListener('storage', syncPrivacy);
+    window.addEventListener(USER_SETTINGS_CHANGED_EVENT, syncPrivacy);
+
+    return () => {
+      window.removeEventListener('storage', syncPrivacy);
+      window.removeEventListener(USER_SETTINGS_CHANGED_EVENT, syncPrivacy);
+    };
+  }, []);
+
+  const openCreateModal = () => {
     setEditingContact(null);
-    form.resetFields();
+    form.setFieldsValue({
+      name: '',
+      phone: '',
+      relationship: 'family',
+      is_guardian: false,
+    });
     setIsModalOpen(true);
   };
 
-  const handleEdit = (contact: Contact) => {
+  const openEditModal = (contact: Contact) => {
     setEditingContact(contact);
-    form.setFieldsValue(contact);
+    form.setFieldsValue({
+      name: contact.name,
+      phone: contact.phone,
+      relationship: contact.relationship,
+      is_guardian: contact.is_guardian,
+    });
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: number) => {
     try {
       await contactsAPI.deleteContact(id);
-      message.success('删除成功');
-      loadContacts();
+      message.success(t('联系人已删除', 'Contact deleted'));
+      await loadContacts();
     } catch (error) {
-      message.error('删除失败');
+      const apiError = error as ApiError;
+      const errorMsg =
+        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('删除联系人失败', 'Failed to delete contact');
+      message.error(errorMsg);
     }
   };
 
-  const handleSubmit = async (values: ContactCreate) => {
+  const handleSubmit = async (values: ContactFormValues) => {
     try {
       if (editingContact) {
         await contactsAPI.updateContact(editingContact.id, values);
-        message.success('更新成功');
+        message.success(t('联系人已更新', 'Contact updated'));
       } else {
         await contactsAPI.createContact(values);
-        message.success('添加成功');
+        message.success(t('联系人已创建', 'Contact created'));
       }
       setIsModalOpen(false);
-      loadContacts();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '操作失败');
+      await loadContacts();
+    } catch (error) {
+      const apiError = error as ApiError;
+      const errorMsg =
+        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('保存联系人失败', 'Failed to save contact');
+      message.error(errorMsg);
     }
   };
 
   const handleSetGuardian = async (contact: Contact) => {
     try {
       await contactsAPI.updateContact(contact.id, { is_guardian: true });
-      message.success('已设为监护人');
-      loadContacts();
+      message.success(t('监护联系人已更新', 'Guardian contact updated'));
+      await loadContacts();
     } catch (error) {
-      message.error('设置失败');
+      const apiError = error as ApiError;
+      const errorMsg =
+        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('更新监护联系人失败', 'Failed to update guardian contact');
+      message.error(errorMsg);
     }
   };
 
   return (
-    <Layout className="bg-darker min-h-screen">
-      <Sidebar currentPage="contacts" onPageChange={onPageChange} />
-      <Content className="ml-[260px] p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold text-white">联系人设置</h1>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} className="btn-primary">
-              添加联系人
-            </Button>
+    <div className="min-h-screen bg-darker ml-[260px] p-6">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">{t('紧急联系人', 'Emergency Contacts')}</h1>
+            <p className="mt-1 text-sm text-gray-400">
+              {t('为高风险预警预先配置可信联系人。', 'Configure trusted contacts for high-risk alerts.')}
+            </p>
           </div>
 
-          <div className="card-dark">
-            {contacts.length === 0 ? (
-              <Empty
-                description={
-                  <div>
-                    <div className="text-gray-400 mb-2">暂无联系人</div>
-                    <div className="text-sm text-gray-500">添加联系人后，高风险时系统会自动通知监护人</div>
-                  </div>
-                }
-              />
-            ) : (
-              <List
-                loading={loading}
-                dataSource={contacts}
-                renderItem={(contact) => (
-                  <List.Item
-                    actions={[
-                      !contact.is_guardian && (
-                        <Button
-                          type="link"
-                          onClick={() => handleSetGuardian(contact)}
-                          className="text-primary hover:text-secondary"
-                        >
-                          设为监护人
-                        </Button>
-                      ),
-                      <Button
-                        type="link"
-                        icon={<EditOutlined />}
-                        onClick={() => handleEdit(contact)}
-                      >
-                        编辑
-                      </Button>,
-                      <Popconfirm
-                        title="确定要删除这个联系人吗？"
-                        onConfirm={() => handleDelete(contact.id)}
-                        okText="确定"
-                        cancelText="取消"
-                      >
-                        <Button type="link" danger icon={<DeleteOutlined />}>
-                          删除
-                        </Button>
-                      </Popconfirm>,
-                    ]}
-                  >
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal} className="btn-primary">
+            {t('添加联系人', 'Add Contact')}
+          </Button>
+        </div>
+
+        <div className="card-dark p-4">
+          {contacts.length === 0 ? (
+            <Empty description={<span className="text-gray-400">{t('暂无联系人', 'No contacts yet')}</span>} />
+          ) : (
+            <List
+              loading={loading}
+              dataSource={contacts}
+              renderItem={(contact) => (
+                <List.Item className="!py-4">
+                  <div className="flex w-full flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center sm:justify-between">
                     <List.Item.Meta
+                      className="mb-0 min-w-[260px] flex-1"
                       avatar={
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-medium">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-white font-semibold">
                           {contact.name.charAt(0).toUpperCase()}
                         </div>
                       }
                       title={
-                        <div className="flex items-center gap-2">
-                          <span className="text-white font-medium">{contact.name}</span>
-                          {contact.is_guardian && (
-                            <Tag color="red">监护人</Tag>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-white font-medium">{privacyMode ? maskUsername(contact.name) : contact.name}</span>
+                          <Tag color={relationshipTagColors[contact.relationship] ?? 'default'} className="m-0 rounded-full">
+                            {relationshipLabels[contact.relationship] ?? contact.relationship}
+                          </Tag>
+                          {contact.is_guardian ? (
+                            <Tag color="red" className="m-0 rounded-full">
+                              {t('监护人', 'Guardian')}
+                            </Tag>
+                          ) : (
+                            <Button
+                              size="small"
+                              onClick={() => void handleSetGuardian(contact)}
+                              className="!h-6 rounded-full border-amber-400/70 bg-amber-500/10 !px-2 text-[12px] !text-amber-200 hover:!border-amber-300 hover:!text-amber-100"
+                            >
+                              {t('设为监护人', 'Set as Guardian')}
+                            </Button>
                           )}
                         </div>
                       }
@@ -157,90 +206,95 @@ export default function ContactsPage({ onPageChange }: ContactsPageProps) {
                         <div className="flex items-center gap-4 text-gray-400">
                           <span className="flex items-center gap-1">
                             <PhoneOutlined />
-                            {contact.phone}
+                            {privacyMode ? maskPhone(contact.phone) : contact.phone}
                           </span>
-                          <span>{contact.relationship}</span>
                         </div>
                       }
                     />
-                  </List.Item>
-                )}
-              />
-            )}
-          </div>
 
-          <div className="mt-6 p-4 card-dark">
-            <h3 className="text-lg font-medium text-white mb-2">💡 提示</h3>
-            <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside">
-              <li>设置监护人后，高风险时系统会自动通知</li>
-              <li>建议添加家人、亲友等可信赖的联系人</li>
-              <li>每位用户只能设置一个监护人</li>
-            </ul>
-          </div>
+                    <div className="flex w-full items-center justify-start gap-2 sm:w-auto sm:justify-end">
+                      <Button
+                        type="default"
+                        icon={<EditOutlined />}
+                        onClick={() => openEditModal(contact)}
+                        className="!h-8 rounded-full !px-3"
+                      >
+                        {t('编辑', 'Edit')}
+                      </Button>
+
+                      <Popconfirm
+                        title={t('确认删除该联系人吗？', 'Delete this contact?')}
+                        okText={t('删除', 'Delete')}
+                        cancelText={t('取消', 'Cancel')}
+                        onConfirm={() => void handleDelete(contact.id)}
+                      >
+                        <Button type="default" danger icon={<DeleteOutlined />} className="!h-8 rounded-full !px-3">
+                          {t('删除', 'Delete')}
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  </div>
+                </List.Item>
+              )}
+            />
+          )}
         </div>
-      </Content>
+      </div>
 
-      {/* 添加/编辑联系人模态框 */}
       <Modal
-        title={editingContact ? '编辑联系人' : '添加联系人'}
+        title={editingContact ? t('编辑联系人', 'Edit Contact') : t('添加联系人', 'Add Contact')}
         open={isModalOpen}
         onCancel={() => setIsModalOpen(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setIsModalOpen(false)}>
-            取消
-          </Button>,
-          <Button key="submit" type="primary" onClick={() => form.submit()}>
-            {editingContact ? '保存' : '添加'}
-          </Button>,
-        ]}
+        onOk={() => form.submit()}
+        okText={editingContact ? t('保存', 'Save') : t('创建', 'Create')}
+        cancelText={t('取消', 'Cancel')}
       >
-        <Form
-          form={form}
-          onFinish={handleSubmit}
-          layout="vertical"
-        >
-          <Form.Item
-            label="姓名"
-            name="name"
-            rules={[{ required: true, message: '请输入姓名' }]}
-          >
-            <Input placeholder="请输入姓名" />
-          </Form.Item>
+        <Form<ContactFormValues> form={form} layout="vertical" onFinish={(values) => void handleSubmit(values)}>
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label={t('姓名', 'Name')}
+                name="name"
+                rules={[{ required: true, message: t('请输入联系人姓名', 'Please enter contact name') }]}
+              >
+                <Input placeholder={t('姓名', 'Name')} />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label={t('关系', 'Relationship')}
+                name="relationship"
+                rules={[{ required: true, message: t('请选择关系', 'Please select relationship') }]}
+              >
+                <Select
+                  options={[
+                    { value: 'family', label: t('家人', 'Family') },
+                    { value: 'friend', label: t('朋友', 'Friend') },
+                    { value: 'coworker', label: t('同事', 'Coworker') },
+                    { value: 'other', label: t('其他', 'Other') },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item
-            label="手机号"
+            label={t('手机号', 'Phone Number')}
             name="phone"
             rules={[
-              { required: true, message: '请输入手机号' },
-              { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' }
+              { required: true, message: t('请输入手机号', 'Please enter phone number') },
+              { pattern: /^1[3-9]\d{9}$/, message: t('请输入有效的中国大陆手机号', 'Please enter a valid mainland China phone number') },
             ]}
           >
-            <Input placeholder="请输入手机号" />
+            <Input placeholder="13800000000" />
           </Form.Item>
 
-          <Form.Item
-            label="关系"
-            name="relationship"
-            rules={[{ required: true, message: '请选择关系' }]}
-          >
-            <Select placeholder="请选择关系">
-              <Select.Option value="家人">家人</Select.Option>
-              <Select.Option value="亲友">亲友</Select.Option>
-              <Select.Option value="同事">同事</Select.Option>
-              <Select.Option value="其他">其他</Select.Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="is_guardian"
-            valuePropName="checked"
-          >
-            <div className="text-gray-400">
-              设为监护人（高风险时自动通知）
-            </div>
+          <Form.Item name="is_guardian" valuePropName="checked">
+            <Checkbox>{t('将该联系人设为监护人', 'Set this contact as guardian')}</Checkbox>
           </Form.Item>
         </Form>
       </Modal>
-    </Layout>
+    </div>
   );
 }
