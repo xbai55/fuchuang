@@ -1,4 +1,6 @@
 // 用户相关类型
+export type RiskLevel = 'low' | 'medium' | 'high';
+
 export interface User {
   id: number;
   username: string;
@@ -51,11 +53,24 @@ export interface FraudDetectionRequest {
 
 export interface FraudDetectionResponse {
   risk_score: number;
-  risk_level: 'low' | 'medium' | 'high';
+  risk_level: RiskLevel;
   scam_type: string;
   warning_message: string;
   final_report: string;
   guardian_alert: boolean;
+}
+
+export interface FraudAlertPayload {
+  title: string;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  scamType: string;
+  summary: string;
+  warningMessage: string;
+  evidence: string[];
+  recommendations: string[];
+  guardianAlert: boolean;
+  finalReport?: string;
 }
 
 // 聊天历史类型
