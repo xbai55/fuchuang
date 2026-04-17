@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -54,9 +54,18 @@ class ContactResponse(ContactBase):
 
 # ========== 反诈预警相关 ==========
 class FraudDetectionRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1)
     audio_url: Optional[str] = None
     image_url: Optional[str] = None
+
+    @field_validator("audio_url", "image_url", mode="before")
+    @classmethod
+    def _validate_url(cls, v):
+        if v is None or v == "":
+            return None
+        if not (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
+            raise ValueError("must be an http/https URL or absolute path")
+        return v
 
 class FraudDetectionResponse(BaseModel):
     risk_score: int

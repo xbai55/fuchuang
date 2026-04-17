@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(sqlite3 backend/fraud_detection.db \".tables\")",
+      "Bash(sqlite3 fraud_detection.db \".tables\")",
+      "Bash(conda run *)"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -59,6 +59,25 @@ class ChatHistory(Base):
 
     # 关系
     user = relationship("User", back_populates="chat_history")
+
+class FraudCase(Base):
+    """清洗后的互联网诈骗案例知识库，供 RAG 检索使用。"""
+    __tablename__ = "fraud_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source = Column(String(100), nullable=False)          # 数据来源标识 (e.g. "csv_batch_2024")
+    source_id = Column(String(100), unique=True, index=True)  # 原始来源 ID，防重复导入
+    raw_text = Column(Text, nullable=False)               # 原始文本
+    cleaned_text = Column(Text, nullable=False)           # 清洗后文本
+    scam_type = Column(String(100), default="")           # LLM 自动标注诈骗类型
+    risk_keywords = Column(Text, default="")              # JSON 数组，关键风险词
+    legal_references = Column(Text, default="")           # 关联法律条文
+    severity = Column(String(20), default="medium")       # high/medium/low 基准
+    text_hash = Column(String(64), unique=True, index=True)  # SHA256，去重用
+    is_synced = Column(Boolean, default=False)            # 是否已同步到 Coze 知识库
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 # 初始化数据库
 def init_db():

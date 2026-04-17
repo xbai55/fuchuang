@@ -1,3 +1,4 @@
+jieba==0.42.1
 alembic==1.16.5
 annotated-doc==0.0.4
 annotated-types==0.7.0

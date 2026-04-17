@@ -14,8 +14,23 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from graphs.graph import main_graph
+from rag.local_rag import get_local_rag
+from utils.file.file import File
 
 router = APIRouter()
+
+
+def _url_to_file(url: str | None, file_type: str) -> File | None:
+    """Return File only for real URLs/paths; reject placeholders like 'string'."""
+    if not url:
+        return None
+    if not (url.startswith("http://") or url.startswith("https://") or os.path.isabs(url)):
+        return None
+    try:
+        return File(url=url, file_type=file_type)
+    except Exception:
+        return None
+
 
 @router.post("/detect", response_model=FraudDetectionResponse)
 async def detect_fraud(
@@ -30,8 +45,8 @@ async def detect_fraud(
         # 构建工作流输入
         workflow_input = {
             "input_text": request.message,
-            "input_audio": None,
-            "input_image": None,
+            "input_audio": _url_to_file(request.audio_url, "audio"),
+            "input_image": _url_to_file(request.image_url, "image"),
             "user_role": current_user.user_role,
             "guardian_name": current_user.guardian_name
         }
@@ -52,7 +67,18 @@ async def detect_fraud(
         
         db.add(chat_history)
         db.commit()
-        
+
+        # 实时扩充本地 RAG：中/高风险案例写入内存索引，供后续检索即时利用
+        if result.get("risk_level") in ("medium", "high") and request.message:
+            try:
+                get_local_rag().add_case(
+                    cleaned_text=f"{request.message} {result.get('scam_type', '')} {result.get('risk_clues', '')}",
+                    scam_type=result.get("scam_type", ""),
+                    severity="high" if result.get("risk_level") == "high" else "medium",
+                )
+            except Exception:
+                pass
+
         # 返回检测结果
         return FraudDetectionResponse(
             risk_score=result.get("risk_score", 0),
