@@ -6,13 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A fraud detection and prevention warning system (反诈预警系统) that uses multi-modal input (text/audio/image), RAG-based knowledge retrieval, and LLM-powered risk assessment to deliver real-time fraud warnings with personalized alerts.
 
+## Development Environment
+
+All development uses the conda environment **`fc`**. Always activate it before running any commands:
+```bash
+conda activate fc
+```
+
 ## Commands
 
 ### Backend
 
 ```bash
 cd backend
-pip install -r requirements.txt
+conda run -n fc pip install -r requirements.txt
 python main.py                          # http://localhost:8000
 uvicorn main:app --reload               # hot reload
 # API docs: http://localhost:8000/docs

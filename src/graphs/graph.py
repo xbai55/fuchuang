@@ -31,12 +31,9 @@ builder = StateGraph(GlobalState, input_schema=GraphInput, output_schema=GraphOu
 # 添加节点
 builder.add_node("multimodal_input", multimodal_input_node)
 builder.add_node("knowledge_search", knowledge_search_node)
-builder.add_node("risk_assessment", risk_assessment_node, 
-                metadata={"type": "agent", "llm_cfg": "config/risk_assessment_cfg.json"})
-builder.add_node("intervention", intervention_node, 
-                metadata={"type": "agent", "llm_cfg": "config/intervention_cfg.json"})
-builder.add_node("report_generation", report_generation_node, 
-                metadata={"type": "agent", "llm_cfg": "config/report_generation_cfg.json"})
+builder.add_node("risk_assessment", risk_assessment_node)
+builder.add_node("intervention", intervention_node)
+builder.add_node("report_generation", report_generation_node)
 
 # 设置入口点
 builder.set_entry_point("multimodal_input")

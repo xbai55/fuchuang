@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
+from dotenv import load_dotenv
+import pathlib
+load_dotenv(pathlib.Path(__file__).parent / ".env")
 
 # API 路由导入
 from api import auth, contacts, fraud_detection

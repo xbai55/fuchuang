@@ -4,7 +4,10 @@
       "Bash(xargs grep *)",
       "Bash(sqlite3 backend/fraud_detection.db \".tables\")",
       "Bash(sqlite3 fraud_detection.db \".tables\")",
-      "Bash(conda run *)"
+      "Bash(conda run *)",
+      "Bash(pip show *)",
+      "Bash(D:\\\\miniforge\\\\envs\\\\fc\\\\python.exe *)",
+      "Bash(/d/miniforge/envs/fc/python.exe *)"
     ]
   }
 }
