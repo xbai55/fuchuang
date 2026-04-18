@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
+import PopupDemo from './pages/PopupDemo';
 import SettingsPage from './pages/SettingsPage';
 import { storage } from './utils/storage';
 import { I18nProvider, useI18n } from './i18n';
@@ -103,6 +104,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/popup-demo" element={<PopupDemo />} />
               <Route
                 path="/"
                 element={
