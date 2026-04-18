@@ -1,8 +1,8 @@
-# 反诈预警系统前端
+# 前端说明
 
-前端基于 React + TypeScript + Vite + Ant Design，负责登录注册、风险识别对话、联系人管理和用户设置。
+前端基于 React 18 + TypeScript + Vite + Ant Design，负责登录注册、反诈检测对话、历史记录、联系人管理和用户设置。
 
-## 启动
+## 启动方式
 
 在 `frontend` 目录执行：
 
@@ -11,7 +11,15 @@ npm install
 npm run dev
 ```
 
-默认地址：http://localhost:5173
+默认访问地址：
+
+- `http://localhost:5173`
+
+如需局域网访问：
+
+```bash
+npm run dev:host
+```
 
 生产构建：
 
@@ -27,38 +35,70 @@ npm run build
 VITE_API_URL=http://localhost:8000
 ```
 
+说明：
+
+- 该值应指向后端 FastAPI 服务地址
+- WebSocket 地址会基于 `VITE_API_URL` 自动换算生成
+
 ## 当前功能
 
-- 中英文切换（简体中文 / English）
-- 深浅色主题与字号设置
-- 隐私模式脱敏展示
-- 文本 + 多模态文件上传（音频/图片/视频）
-- 聊天输入区拖拽上传（支持页面级兜底 drop 监听）
-- 异步任务 WebSocket 实时进度推送
-- WS 异常时自动降级轮询
+- 登录、注册、获取当前用户信息
+- 反诈同步检测与异步检测
+- WebSocket 实时任务进度更新
+- 文本、音频、图片、视频上传
+- 聊天输入区拖拽上传
+- 检测历史记录查看与删除
+- Agent 对话
+- 中英双语切换
+- 主题、字号、隐私模式设置
+- 个人资料设置
 
-## 拖拽上传行为说明
+## 当前资料字段
 
-- 可直接从本地文件管理器拖入音频/图片/视频文件。
-- 一次可拖入多文件，但同类型仅保留首个文件。
-- 从飞书等应用拖拽时，若浏览器未提供本地文件句柄：
-  - 前端会尝试从拖拽载荷中解析链接并下载转换；
-  - 若受跨域或登录态限制，会提示用户先下载到本地后再上传。
+设置页当前支持这些资料项：
+
+- 用户名
+- 邮箱
+- 年龄：`child / young_adult / elderly`
+- 性别：`male / female`
+- 职业：`student / enterprise_staff / self_employed / retired_group / public_officer / finance_practitioner / other`
+- 监护人姓名
+
+用户设置字段包括：
+
+- `theme`
+- `notify_enabled`
+- `notify_high_risk`
+- `notify_guardian_alert`
+- `language`
+- `font_size`
+- `privacy_mode`
 
 ## 目录说明
 
 ```text
 frontend/src/
-  components/              # 通用组件（侧边栏等）
-  pages/                   # 页面（登录、注册、聊天、联系人、设置）
-  services/api.ts          # 后端 API 封装
-  utils/                   # 存储、外观、隐私工具
-  i18n.tsx                 # 语言上下文
-  types/index.ts           # TS 类型定义
+  components/         通用组件
+  pages/              页面
+  services/api.ts     API 封装
+  types/index.ts      类型定义
+  i18n.tsx            语言上下文
+  utils/              外观、存储、隐私相关工具
 ```
 
 ## 调试建议
 
-- 前端 401：检查 localStorage 中 token 是否存在。
-- 页面主题不生效：确认用户设置接口返回的 theme/font_size/privacy_mode 字段。
-- 实时推送不更新：检查浏览器 Network 中 `/api/fraud/ws/tasks/{task_id}` 连接状态。
+### 页面 401
+
+检查浏览器本地是否存在有效 `access_token`。
+
+### 检测任务进度不更新
+
+检查浏览器 Network 面板中 WebSocket 连接：
+
+- `/api/fraud/ws/tasks/{task_id}`
+- `/api/agent/ws/tasks/{task_id}`
+
+### 前端请求地址错误
+
+优先检查 `frontend/.env` 中的 `VITE_API_URL` 是否指向正确后端。
