@@ -2342,7 +2342,10 @@ async def detect_fraud_async(
                 request_success = True
 
             except Exception as exc:
+                import traceback
                 error_message = str(exc)
+                print(f"[fraud_detection_error] task={task.task_id} exc={exc!r}")
+                traceback.print_exc()
                 db_session.rollback()
                 task_manager.fail_task(task.task_id, str(exc))
 

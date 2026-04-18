@@ -634,6 +634,10 @@ export default function ChatPage() {
       .filter(([, value]) => Boolean(value));
   };
 
+  const localizeFraudEnglishContent = (text: string | undefined | null): string => {
+    return text ?? '';
+  };
+
   const buildEarlyWarningSummary = (earlyWarning: FraudEarlyWarning) => {
     const clues = (earlyWarning.risk_clues ?? [])
       .slice(0, 3)
@@ -1244,6 +1248,7 @@ export default function ChatPage() {
       const errorMsg =
         apiError.response?.data?.detail ??
         apiError.response?.data?.message ??
+        (error instanceof Error ? error.message : null) ??
         (isFraudMode ? t('识别失败', 'Analysis failed') : t('发送失败', 'Send failed'));
       message.error(errorMsg);
     } finally {
