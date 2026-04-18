@@ -337,6 +337,24 @@ class KnowledgeSearchService:
 
         return stats
 
+    def reload_index(self) -> bool:
+        """
+        从磁盘热重载 TF-IDF 索引（ingest 后调用以使新知识即时生效）。
+        Returns True on success.
+        """
+        try:
+            config_path = get_rag_config_path()
+            if not config_path.exists():
+                return False
+            config = load_rag_config(config_path)
+            new_index = SimilarityIndex.load(config.paths.index_dir)
+            self.retriever.tfidf_index = new_index
+            print(f"[RAG] 索引热重载完成，共 {len(new_index.chunks)} 个 chunks")
+            return True
+        except Exception as exc:
+            print(f"[RAG] 索引热重载失败: {exc}")
+            return False
+
     def _get_default_legal_basis(self) -> List[str]:
         """
         获取默认法律依据

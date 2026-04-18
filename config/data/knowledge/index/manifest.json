@@ -1,5 +1,6 @@
 {
   "backend": "tfidf",
   "model_name": null,
-  "chunk_count": 6
+  "chunk_count": 7,
+  "last_hot_reload": "2026-04-18T15:26:00.498449+00:00"
 }

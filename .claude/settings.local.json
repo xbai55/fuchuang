@@ -21,7 +21,8 @@
       "Bash(pip show:*)",
       "Bash(echo \"Exit code: $?\")",
       "Bash(python -c \":*)",
-      "Bash(ls -la C:/Users/xbai55/Desktop/fc/claude_fc/backend/*.db)"
+      "Bash(ls -la C:/Users/xbai55/Desktop/fc/claude_fc/backend/*.db)",
+      "Bash(conda run *)"
     ]
   }
 }

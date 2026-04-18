@@ -81,7 +81,7 @@ else:
     load_dotenv(Path(__file__).parent.parent / ".env")
 
 # API 路由导入 - 融合所有功能
-from api import auth, contacts, fraud_detection, agent_chat, settings, monitoring
+from api import auth, contacts, fraud_detection, agent_chat, settings, monitoring, knowledge_update
 
 # 数据库初始化
 from database import init_db
@@ -262,6 +262,7 @@ app.include_router(contacts.router, prefix="/api/contacts", tags=["联系人"])
 app.include_router(fraud_detection.router, prefix="/api/fraud", tags=["反诈检测"])
 app.include_router(agent_chat.router, prefix="/api/agent", tags=["Agent 聊天"])
 app.include_router(monitoring.router, prefix="/api/monitor", tags=["模型监控"])
+app.include_router(knowledge_update.router, prefix="/api/knowledge", tags=["知识库管理"])
 
 # ==================== 诊断：打印所有注册的路由 ====================
 print("\n" + "="*60)

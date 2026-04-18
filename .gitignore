@@ -83,4 +83,5 @@ config/data/knowledge/index/
 # Environment files
 # =========================
 .env
+CLAUDE.md
 
