@@ -26,7 +26,11 @@ from src.brain.rag.indexer import SimilarityIndex
 from src.brain.rag.models import create_search_hit_from_retrieved_case
 from src.brain.rag.retriever import FraudCaseRetriever
 from src.core.utils.config_loader import load_node_config
-from src.core.utils.risk_personalization import build_personalized_thresholds
+from src.core.utils.risk_personalization import (
+    build_personalized_thresholds,
+    format_combined_profile_text,
+    normalize_user_role,
+)
 from src.evolution.monitoring_service import monitoring_service
 from src.evolution.runtime import get_evolution_runtime
 
@@ -221,14 +225,23 @@ def _build_user_memory_context(db: Session, current_user: User, message: str) ->
         long_term_memory_summary = "暂无长期历史行为记录"
 
     dynamic_thresholds = build_personalized_thresholds(
-        user_role=str(current_user.user_role or "general"),
+        user_role=normalize_user_role(str(current_user.user_role or "general")),
         short_term_events=recent_detections,
         history_profile=history_profile,
+        age_group=str(getattr(current_user, "age_group", "unknown") or "unknown"),
+        gender=str(getattr(current_user, "gender", "unknown") or "unknown"),
+        occupation=str(getattr(current_user, "occupation", "other") or "other"),
     )
 
     return {
         "short_term_memory_summary": short_term_memory_summary,
         "long_term_memory_summary": long_term_memory_summary,
+        "combined_profile_text": format_combined_profile_text(
+            str(getattr(current_user, "age_group", "unknown") or "unknown"),
+            str(getattr(current_user, "gender", "unknown") or "unknown"),
+            str(getattr(current_user, "occupation", "other") or "other"),
+            fallback_role=str(current_user.user_role or "general"),
+        ),
         "recent_detections": recent_detections,
         "history_profile": history_profile,
         "dynamic_thresholds": dynamic_thresholds,
@@ -266,6 +279,7 @@ def _build_single_pass_user_prompt(
 ) -> str:
     memory_context = memory_context or {}
     dynamic_thresholds = dynamic_thresholds or {}
+    combined_profile_text = str(memory_context.get("combined_profile_text") or "none")
 
     warning_score = int((early_warning or {}).get("risk_score", 0))
     warning_level = str((early_warning or {}).get("risk_level", "low")).lower()
@@ -285,6 +299,7 @@ def _build_single_pass_user_prompt(
     return (
         "请基于以下信息输出反诈分析：\n"
         f"用户角色: {user_role or 'general'}\n"
+        f"组合画像:\n{combined_profile_text}\n"
         f"{media_hint}\n"
         f"快速预警分数: {warning_score}\n"
         f"快速预警等级: {warning_level}\n"
@@ -1091,7 +1106,7 @@ async def detect_fraud(
             result, _ = await _run_single_pass_detection_stream(
                 task_id=f"sync_{uuid.uuid4().hex[:12]}",
                 message=message,
-                user_role=current_user.user_role,
+                user_role=normalize_user_role(current_user.user_role),
                 early_warning=fallback_warning,
                 has_media=False,
                 memory_context=memory_context,
@@ -1101,13 +1116,18 @@ async def detect_fraud(
             workflow_options = {
                 "prefer_ai_rate_early_warning": bool(image_path),
                 "image_ai_ocr_skip_threshold": 0.74,
+                "language": str(getattr(current_user, "language", "zh-CN") or "zh-CN"),
+                "age_group": str(getattr(current_user, "age_group", "unknown") or "unknown"),
+                "gender": str(getattr(current_user, "gender", "unknown") or "unknown"),
+                "occupation": str(getattr(current_user, "occupation", "other") or "other"),
+                "combined_profile_text": str(memory_context.get("combined_profile_text") or ""),
             }
             result = await graph_client.detect_fraud(
                 text=message,
                 audio_path=audio_path,
                 image_path=image_path,
                 video_path=video_path,
-                user_role=current_user.user_role,
+                user_role=normalize_user_role(current_user.user_role),
                 guardian_name=(guardian_contact.name if guardian_contact else current_user.guardian_name),
                 guardian_phone=(guardian_contact.phone if guardian_contact else None),
                 emergency_contacts=_serialize_contacts(contacts),
@@ -1184,7 +1204,7 @@ async def detect_fraud_async(
         task = task_manager.create_task(user_id=current_user.id, input_summary=input_summary)
         task_manager.update_task_progress(task.task_id, 5)
         user_id = current_user.id
-        user_role = current_user.user_role
+        user_role = normalize_user_role(current_user.user_role)
         fallback_guardian_name = current_user.guardian_name
         notify_enabled = current_user.notify_enabled
         notify_guardian_alert = current_user.notify_guardian_alert
@@ -1221,6 +1241,11 @@ async def detect_fraud_async(
             "image_ai_probability": (image_ai_warning or {}).get("image_ai_probability"),
             "image_ai_risk_level": (image_ai_warning or {}).get("risk_level"),
             "image_ai_ocr_skip_threshold": (image_ai_warning or {}).get("image_ai_ocr_skip_threshold", 0.74),
+            "language": str(getattr(current_user, "language", "zh-CN") or "zh-CN"),
+            "age_group": str(getattr(current_user, "age_group", "unknown") or "unknown"),
+            "gender": str(getattr(current_user, "gender", "unknown") or "unknown"),
+            "occupation": str(getattr(current_user, "occupation", "other") or "other"),
+            "combined_profile_text": str(memory_context.get("combined_profile_text") or ""),
         }
 
         contacts = db.query(Contact).filter(Contact.user_id == current_user.id).all()

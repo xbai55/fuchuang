@@ -2,6 +2,7 @@
 Graph client for backend API.
 Provides a simplified interface to the anti-fraud workflow graph.
 """
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,7 @@ if src_path_str not in sys.path:
     sys.path.insert(0, src_path_str)
 
 from core.models import EmergencyContact, GlobalState, MediaFile, UserContext, UserRole
+from core.utils import normalize_user_role
 from evolution.runtime import get_evolution_runtime
 from graphs.graph import get_main_graph
 
@@ -66,11 +68,13 @@ class GraphClient:
             for item in (emergency_contacts or [])
         ]
 
+        normalized_role = normalize_user_role(user_role)
+
         state = GlobalState(
             input_text=text,
             input_files=input_files,
             user_context=UserContext(
-                user_role=UserRole(user_role),
+                user_role=UserRole(normalized_role),
                 guardian_name=guardian_name,
                 guardian_phone=guardian_phone,
                 user_id=user_id,
@@ -157,12 +161,17 @@ class GraphClient:
         formatted_cases = []
         for case in similar_cases[:3]:
             if isinstance(case, dict):
-                formatted_cases.append({"title": case.get("title", ""), "content": case.get("content", "")[:200]})
+                formatted_cases.append(
+                    {
+                        "title": self._clean_report_placeholder(case.get("title", "")),
+                        "content": self._clean_report_placeholder(case.get("content", ""))[:200],
+                    }
+                )
             else:
                 formatted_cases.append(
                     {
-                        "title": getattr(case, "title", ""),
-                        "content": (getattr(case, "content", "") or "")[:200],
+                        "title": self._clean_report_placeholder(getattr(case, "title", "")),
+                        "content": self._clean_report_placeholder(getattr(case, "content", "") or "")[:200],
                     }
                 )
 
@@ -186,9 +195,25 @@ class GraphClient:
             "action_items": action_items,
             "escalation_actions": escalation_actions,
             "guardian_notification": guardian_notification,
-            "final_report": final_report,
+            "final_report": self._clean_report_placeholder(final_report),
             "similar_cases": formatted_cases,
         }
+
+    def _clean_report_placeholder(self, text: str) -> str:
+        """Remove placeholder source text from reports and case snippets."""
+        if not text:
+            return ""
+
+        cleaned = str(text)
+        cleaned = re.sub(r"(:\s*)?内容来自种子URL（占位符）\.\.\.", "", cleaned)
+        cleaned = re.sub(r"(:\s*)?内容来自种子URL\(占位符\)\.\.\.", "", cleaned)
+        cleaned = re.sub(r"(:\s*)?内容来自种子URL（占位符）.*$", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"(:\s*)?内容来自种子URL\(占位符\).*$", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"(:\s*)?Content from seed URL \(placeholder\)\.\.\.", "", cleaned)
+        cleaned = re.sub(r"(:\s*)?Content from seed URL \(placeholder\).*$", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*-\s*$", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
 
 
 graph_client = GraphClient()

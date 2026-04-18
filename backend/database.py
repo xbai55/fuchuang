@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, create_engine, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, synonym
 
 
@@ -23,6 +23,9 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     user_role = Column(String(20), default="general")
+    age_group = Column(String(20), default="unknown")
+    gender = Column(String(20), default="unknown")
+    occupation = Column(String(40), default="other")
     guardian_name = Column(String(100), default="")
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
@@ -72,6 +75,24 @@ class ChatHistory(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _ensure_user_profile_columns()
+
+
+def _ensure_user_profile_columns() -> None:
+    expected_columns = {
+        "age_group": "ALTER TABLE users ADD COLUMN age_group VARCHAR(20) DEFAULT 'unknown'",
+        "gender": "ALTER TABLE users ADD COLUMN gender VARCHAR(20) DEFAULT 'unknown'",
+        "occupation": "ALTER TABLE users ADD COLUMN occupation VARCHAR(40) DEFAULT 'other'",
+    }
+
+    with engine.begin() as conn:
+        existing_columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()
+        }
+        for column_name, ddl in expected_columns.items():
+            if column_name not in existing_columns:
+                conn.execute(text(ddl))
 
 
 def get_db():

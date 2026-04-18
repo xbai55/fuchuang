@@ -19,6 +19,9 @@ class UserResponse(BaseModel):
     username: str
     email: str
     user_role: str = "general"
+    age_group: str = "unknown"
+    gender: str = "unknown"
+    occupation: str = "other"
     guardian_name: str = ""
     # 设置字段
     theme: str = "dark"

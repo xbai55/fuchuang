@@ -117,7 +117,8 @@ html.font-size-large {
     background-color: var(--app-input-bg) !important;
     border-color: var(--app-border) !important;
     color: var(--app-text) !important;
-    @apply border px-4 py-2.5 rounded-lg focus:outline-none focus:border-primary transition-all duration-200;
+    height: 46px !important;
+    @apply border px-4 rounded-lg focus:outline-none focus:border-primary transition-all duration-200;
   }
 
   .input-dark input,
@@ -125,6 +126,45 @@ html.font-size-large {
   .input-dark .ant-input {
     color: var(--app-text) !important;
     background-color: transparent !important;
+    line-height: 44px !important;
+  }
+
+  .input-dark.ant-input-affix-wrapper {
+    display: flex;
+    align-items: center;
+  }
+
+  .input-dark.ant-input-affix-wrapper input {
+    line-height: normal !important;
+  }
+
+  .select-dark.ant-select {
+    width: 100%;
+  }
+
+  .select-dark.ant-select .ant-select-selector {
+    background-color: var(--app-input-bg) !important;
+    border-color: var(--app-border) !important;
+    color: var(--app-text) !important;
+    height: 46px !important;
+    border-radius: 0.5rem !important;
+    padding: 0 14px !important;
+    box-shadow: none !important;
+  }
+
+  .select-dark.ant-select .ant-select-selection-item,
+  .select-dark.ant-select .ant-select-selection-placeholder {
+    color: var(--app-text) !important;
+    line-height: 44px !important;
+  }
+
+  .select-dark.ant-select .ant-select-arrow {
+    color: var(--app-text-muted) !important;
+  }
+
+  .select-dark.ant-select.ant-select-focused .ant-select-selector,
+  .select-dark.ant-select:hover .ant-select-selector {
+    border-color: var(--app-border) !important;
   }
 
   /* 自定义卡片样式 */

@@ -181,6 +181,49 @@ export default function ChatPage() {
     return content;
   };
 
+  const localizeFraudEnglishContent = (rawContent: string) => {
+    const content = normalizeMarkdownContent(rawContent);
+    if (isZh || !content) {
+      return content;
+    }
+
+    let localized = content;
+    const replacements: Array<[RegExp, string]> = [
+      [/规则与RAG双重信号均提示高风险，请立即停止转账并核验身份。/g, 'Rule and RAG signals both indicate high risk. Stop any transfer immediately and verify the identity.'],
+      [/已同步启动音频\/图片\/视频AI率检测。/g, 'Audio/Image/Video AI-rate detection has also been started.'],
+      [/RAG命中知识片段:\s*(\d+)条/g, 'RAG matched knowledge snippets: $1 items'],
+      [/概述/g, 'Overview'],
+      [/本报告基于用户提供的信息，对疑似诈骗行为进行分析和评估，并提供相应的干预措施和Legal Basis。/g, 'This report analyzes and evaluates suspected fraudulent behavior based on the information provided by the user, and provides corresponding intervention measures and legal basis.'],
+      [/多模态分析/g, 'Multimodal Analysis'],
+      [/内容识别/g, 'Content Recognition'],
+      [/系统识别出上传内容为：/g, 'The system identified the uploaded content as:'],
+      [/系统前置判定/g, 'System Pre-screen Assessment'],
+      [/极大概率为 AI 伪造合成内容，置信度为 1\.00。/g, 'There is an extremely high probability that the content is AI-generated or synthetically forged, with a confidence score of 1.00.'],
+      [/风险评估/g, 'Risk Assessment'],
+      [/冒充某宝理赔中心的客服/g, 'Impersonating customer service from an e-commerce compensation center'],
+      [/要求提供验证码进行理赔/g, 'Requesting a verification code to process compensation'],
+      [/系统前置判定为极大概率AI伪造合成内容/g, 'The system pre-screen determined that the content is highly likely to be AI-generated or synthetically forged'],
+      [/Similar Cases参考显示与已知诈骗案例相似/g, 'Similar Cases indicate similarity to known fraud cases'],
+      [/RAGRisk Score为54\/100，Risk Level为high/g, 'RAG Risk Score is 54/100, with a Risk Level of High'],
+      [/用户画像显示为High Risk游戏交易、假冒粉丝任务和绕过防沉迷诈骗/g, 'The user profile indicates High Risk patterns involving game trading, fake fan-task scams, and anti-addiction bypass scams'],
+      [/长期行为画像显示Medium Risk占比71%/g, 'The long-term behavior profile shows that Medium Risk accounts for 71%'],
+      [/干预措施/g, 'Intervention Measures'],
+      [/警惕！您可能正遭遇Fake Customer Service Scam。/g, 'Warning! You may be encountering a Fake Customer Service Scam.'],
+      [/不要提供任何验证码或个人信息。/g, 'Do not provide any verification codes or personal information.'],
+      [/直接联系学校工作人员或家长核实情况。/g, 'Contact school staff or parents directly to verify the situation.'],
+      [/不要相信任何要求您转账到安全账户的要求。/g, 'Do not trust any request asking you to transfer money to a so-called safe account.'],
+      [/向学校或家长报告此事，一起向当地警方报告诈骗行为。/g, 'Report the incident to the school or parents, and report the fraud to the local police together.'],
+      [/参考案例/g, 'Reference Cases'],
+      [/以上报告基于当前信息分析得出，建议用户采取相应的预防措施，并及时向有关部门报告可疑行为。/g, 'This report is based on the analysis of the current information. The user is advised to take appropriate preventive measures and promptly report suspicious activity to the relevant authorities.'],
+    ];
+
+    replacements.forEach(([pattern, replacement]) => {
+      localized = localized.replace(pattern, replacement);
+    });
+
+    return localized;
+  };
+
   const splitFraudSummaryAndDetail = (rawContent: string, fallbackDetail: string = '') => {
     const normalized = normalizeMarkdownContent(rawContent);
     const normalizedFallback = normalizeMarkdownContent(fallbackDetail);
@@ -938,10 +981,10 @@ export default function ChatPage() {
     closeEarlyWarningPopup();
 
     const clueText = earlyWarning.risk_clues && earlyWarning.risk_clues.length > 0
-      ? ` ${t('线索', 'Clues')}: ${earlyWarning.risk_clues.slice(0, 2).join('；')}`
+      ? ` ${t('??', 'Clues')}: ${earlyWarning.risk_clues.slice(0, 2).map((item) => localizeFraudEnglishContent(item)).join('; ')}`
       : '';
 
-    const content = `${t('快速预警', 'Early Warning')}: ${earlyWarning.warning_message}${clueText}`;
+    const content = `${t('????', 'Early Warning')}: ${localizeFraudEnglishContent(earlyWarning.warning_message)}${clueText}`;
     const popupType = earlyWarning.risk_level === 'low' ? 'info' : 'warning';
     const popupKey = `fraud-early-warning-${Date.now()}`;
     earlyWarningMessageKeyRef.current = popupKey;

@@ -56,11 +56,23 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
 
   const t = (zh: string, en: string) => (isZh ? zh : en);
 
-  const userRoleOptions = [
-    { value: 'general', label: t('普通用户', 'General User') },
-    { value: 'elderly', label: t('老年人', 'Elderly') },
+  const occupationOptions = [
     { value: 'student', label: t('学生', 'Student') },
-    { value: 'finance', label: t('金融从业者', 'Finance Professional') },
+    { value: 'enterprise_staff', label: t('企业职员', 'Enterprise Staff') },
+    { value: 'self_employed', label: t('个体经营', 'Self-employed') },
+    { value: 'retired_group', label: t('退休群体', 'Retired Group') },
+    { value: 'public_officer', label: t('公职人员', 'Public Officer') },
+    { value: 'finance_practitioner', label: t('金融从业者', 'Finance Practitioner') },
+    { value: 'other', label: t('其他职业', 'Other Occupation') },
+  ];
+  const ageGroupOptions = [
+    { value: 'child', label: t('儿童', 'Child') },
+    { value: 'young_adult', label: t('青壮年', 'Young Adult') },
+    { value: 'elderly', label: t('老人', 'Elderly') },
+  ];
+  const genderOptions = [
+    { value: 'male', label: t('男', 'Male') },
+    { value: 'female', label: t('女', 'Female') },
   ];
 
   const getErrorMessage = (error: unknown, fallback: string) => {
@@ -82,6 +94,9 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
         username: settings.username,
         email: settings.email,
         user_role: settings.user_role,
+        age_group: settings.age_group,
+        gender: settings.gender,
+        occupation: settings.occupation,
         guardian_name: settings.guardian_name,
       });
     } catch (error) {
@@ -250,12 +265,41 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
 
                 <Row gutter={16}>
                   <Col span={12}>
-                    <Form.Item label={t('用户角色', 'Role')} name="user_role">
-                      <Select options={userRoleOptions} />
+                    <Form.Item
+                      label={t('年龄', 'Age Group')}
+                      name="age_group"
+                      rules={[{ required: true, message: t('请选择年龄', 'Please select age group') }]}
+                    >
+                      <Select className="select-dark" options={ageGroupOptions} />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item label={t('监护人姓名', 'Guardian Name')} name="guardian_name">
+                    <Form.Item
+                      label={t('性别', 'Gender')}
+                      name="gender"
+                      rules={[{ required: true, message: t('请选择性别', 'Please select gender') }]}
+                    >
+                      <Select className="select-dark" options={genderOptions} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      label={t('职业', 'Occupation')}
+                      name="occupation"
+                      rules={[{ required: true, message: t('请选择职业', 'Please select occupation') }]}
+                    >
+                      <Select className="select-dark" options={occupationOptions} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label={t('监护人姓名', 'Guardian Name')}
+                      name="guardian_name"
+                      rules={[{ required: true, message: t('请输入监护人姓名', 'Please enter guardian name') }]}
+                    >
                       <Input className="input-dark" />
                     </Form.Item>
                   </Col>

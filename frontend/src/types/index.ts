@@ -1,9 +1,36 @@
 // 用户相关类型
+export type UserRole =
+  | 'general'
+  | 'elderly'
+  | 'child'
+  | 'young_adult'
+  | 'student'
+  | 'enterprise_staff'
+  | 'self_employed'
+  | 'retired_group'
+  | 'public_officer'
+  | 'finance_practitioner'
+  | 'other';
+
+export type AgeGroup = 'unknown' | 'child' | 'young_adult' | 'elderly';
+export type Gender = 'unknown' | 'male' | 'female';
+export type Occupation =
+  | 'student'
+  | 'enterprise_staff'
+  | 'self_employed'
+  | 'retired_group'
+  | 'public_officer'
+  | 'finance_practitioner'
+  | 'other';
+
 export interface User {
   id: number;
   username: string;
   email: string;
-  user_role: 'elderly' | 'student' | 'finance' | 'general';
+  user_role: UserRole;
+  age_group: AgeGroup;
+  gender: Gender;
+  occupation: Occupation;
   guardian_name: string;
   // 设置字段
   theme: 'dark' | 'light' | 'system';
@@ -30,7 +57,10 @@ export interface UserSettings {
 export interface UserProfileUpdate {
   username?: string;
   email?: string;
-  user_role?: 'elderly' | 'student' | 'finance' | 'general';
+  user_role?: UserRole;
+  age_group?: AgeGroup;
+  gender?: Gender;
+  occupation?: Occupation;
   guardian_name?: string;
 }
 

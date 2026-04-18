@@ -5,6 +5,12 @@ from typing import Optional
 from database import get_db, User
 from schemas.response import success_response, error_response, ResponseCode
 from auth import get_current_active_user, verify_password, get_password_hash
+from src.core.utils import (
+    normalize_age_group,
+    normalize_gender,
+    normalize_occupation,
+    occupation_to_user_role,
+)
 
 router = APIRouter()
 
@@ -26,6 +32,9 @@ class UserProfileUpdate(BaseModel):
     username: Optional[str] = None
     email: Optional[str] = None
     user_role: Optional[str] = None
+    age_group: Optional[str] = None
+    gender: Optional[str] = None
+    occupation: Optional[str] = None
     guardian_name: Optional[str] = None
 
 
@@ -42,6 +51,9 @@ class UserSettingsResponse(BaseModel):
     username: str
     email: str
     user_role: str
+    age_group: str
+    gender: str
+    occupation: str
     guardian_name: str
     theme: str
     notify_enabled: bool
@@ -67,6 +79,9 @@ async def get_user_settings(
             "username": current_user.username,
             "email": current_user.email,
             "user_role": current_user.user_role,
+            "age_group": getattr(current_user, "age_group", "unknown"),
+            "gender": getattr(current_user, "gender", "unknown"),
+            "occupation": getattr(current_user, "occupation", "other"),
             "guardian_name": current_user.guardian_name,
             "theme": current_user.theme,
             "notify_enabled": current_user.notify_enabled,
@@ -112,6 +127,9 @@ async def update_user_settings(
             "username": current_user.username,
             "email": current_user.email,
             "user_role": current_user.user_role,
+            "age_group": getattr(current_user, "age_group", "unknown"),
+            "gender": getattr(current_user, "gender", "unknown"),
+            "occupation": getattr(current_user, "occupation", "other"),
             "guardian_name": current_user.guardian_name,
             "theme": current_user.theme,
             "notify_enabled": current_user.notify_enabled,
@@ -147,8 +165,15 @@ async def update_user_profile(
         current_user.email = profile.email
 
     # 更新其他字段
-    if profile.user_role is not None:
-        current_user.user_role = profile.user_role
+    if profile.age_group is not None:
+        current_user.age_group = normalize_age_group(profile.age_group)
+    if profile.gender is not None:
+        current_user.gender = normalize_gender(profile.gender)
+    if profile.occupation is not None:
+        current_user.occupation = normalize_occupation(profile.occupation)
+        current_user.user_role = occupation_to_user_role(current_user.occupation)
+    elif profile.user_role is not None:
+        current_user.user_role = occupation_to_user_role(profile.user_role)
     if profile.guardian_name is not None:
         current_user.guardian_name = profile.guardian_name
 
@@ -161,6 +186,9 @@ async def update_user_profile(
             "username": current_user.username,
             "email": current_user.email,
             "user_role": current_user.user_role,
+            "age_group": getattr(current_user, "age_group", "unknown"),
+            "gender": getattr(current_user, "gender", "unknown"),
+            "occupation": getattr(current_user, "occupation", "other"),
             "guardian_name": current_user.guardian_name,
             "theme": current_user.theme,
             "notify_enabled": current_user.notify_enabled,

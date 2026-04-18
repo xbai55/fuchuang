@@ -13,7 +13,7 @@ from src.core.models import (
     RetrievedCase,
 )
 from src.core.interfaces import LLMClient
-from src.core.utils import load_node_config
+from src.core.utils import format_role_profile_text, load_node_config, normalize_user_role
 from src.core.utils.risk_personalization import build_personalized_thresholds, risk_level_from_score
 
 
@@ -74,6 +74,8 @@ class RiskEngine:
 
 ## 用户画像
 - 用户类型: {user_role}
+- 组合画像:
+{combined_profile}
 
 ## 短期记忆
 {short_term_memory_summary}
@@ -147,6 +149,9 @@ class RiskEngine:
             user_role=state.user_context.user_role.value,
             short_term_events=list(metadata.get("recent_detections") or []),
             history_profile=dict(metadata.get("history_profile") or {}),
+            age_group=str(metadata.get("age_group") or "unknown"),
+            gender=str(metadata.get("gender") or "unknown"),
+            occupation=str(metadata.get("occupation") or "other"),
         )
         low_threshold = int(dynamic_thresholds.get("low_threshold", self.LOW_THRESHOLD))
         high_threshold = int(dynamic_thresholds.get("high_threshold", self.HIGH_THRESHOLD))
@@ -338,11 +343,12 @@ class RiskEngine:
         rag_analysis = self._format_rag_analysis(rag_assessment)
 
         # Get user role
-        user_role = state.user_context.user_role.value
+        user_role = normalize_user_role(state.user_context.user_role.value)
 
         threshold_meta = dynamic_thresholds or {}
         short_term_summary = state.short_term_memory_summary or "暂无短期交互记忆"
         history_profile = dict((state.workflow_metadata or {}).get("history_profile") or {})
+        combined_profile = str((state.workflow_metadata or {}).get("combined_profile_text") or "none")
         long_term_summary = self._format_history_profile(history_profile)
         threshold_reasons = threshold_meta.get("adjustment_reasons") or []
         threshold_reason_text = "；".join(str(item) for item in threshold_reasons) if threshold_reasons else "无"
@@ -353,6 +359,8 @@ class RiskEngine:
             "similar_cases": cases_text,
             "rag_analysis": rag_analysis,
             "user_role": user_role,
+            "role_profile": format_role_profile_text(user_role),
+            "combined_profile": combined_profile,
             "short_term_memory_summary": short_term_summary,
             "long_term_memory_summary": long_term_summary,
             "dynamic_low_threshold": int(threshold_meta.get("low_threshold", self.LOW_THRESHOLD)),

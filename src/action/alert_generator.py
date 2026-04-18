@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from src.core.interfaces import LLMClient
 from src.core.models import GlobalState, Intervention, RiskLevel
-from src.core.utils import load_node_config
+from src.core.utils import format_role_profile_text, load_node_config, normalize_user_role
 
 
 class AlertGenerator:
@@ -17,6 +17,8 @@ class AlertGenerator:
     )
     DEFAULT_USER_TEMPLATE = (
         "User role: {user_role}\n"
+        "Role profile:\n{role_profile}\n"
+        "Combined profile:\n{combined_profile}\n"
         "Guardian: {guardian_name}\n"
         "Short-term memory: {short_term_memory_summary}\n"
         "Risk score: {risk_score}/100\n"
@@ -55,9 +57,13 @@ class AlertGenerator:
     def _build_context(self, state: GlobalState) -> Dict[str, Any]:
         risk = state.risk_assessment
         clues = risk.clues if risk and risk.clues else []
+        normalized_role = normalize_user_role(state.user_context.user_role.value)
+        combined_profile = str((state.workflow_metadata or {}).get("combined_profile_text") or "none")
         return {
             "input_text": state.get_combined_text() or "",
-            "user_role": state.user_context.user_role.value,
+            "user_role": normalized_role,
+            "role_profile": format_role_profile_text(normalized_role),
+            "combined_profile": combined_profile,
             "guardian_name": state.user_context.guardian_name or "not_set",
             "risk_score": risk.score if risk else 0,
             "risk_level": risk.level.value if risk else "low",

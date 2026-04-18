@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.core.utils import get_role_profile, normalize_user_role
 from src.evolution.runtime import get_evolution_runtime
 
 
@@ -65,7 +66,7 @@ class CozeAgent:
 
     def __init__(self, user_id: int, user_role: str = "general"):
         self.user_id = user_id
-        self.user_role = user_role
+        self.user_role = normalize_user_role(user_role)
         self.runtime = get_evolution_runtime()
         self.db_path = Path(__file__).resolve().parents[2] / "fraud_detection.db"
         self.llm = _get_shared_agent_llm()
@@ -80,7 +81,15 @@ class CozeAgent:
             "finance": "你是一位专业严谨的反诈顾问，面向财会场景输出审慎、规范的建议。",
             "general": "你是一位专业的反诈助手，优先给出清晰、实用、可立即执行的防骗建议。",
         }
-        return prompts.get(self.user_role, prompts["general"])
+        profile = get_role_profile(self.user_role)
+        return (
+            "你是一位专业反诈助手，需要根据用户角色提供差异化提醒。\n"
+            f"当前角色: {profile['label']}({profile['role_key']})\n"
+            f"沟通风格: {profile['tone']}\n"
+            f"重点风险: {profile['focus']}\n"
+            f"安全教育重点: {profile['education']}\n"
+            "请优先给出简洁、可执行、符合该角色行为习惯和风险偏好的建议。"
+        )
 
     async def chat(
         self,

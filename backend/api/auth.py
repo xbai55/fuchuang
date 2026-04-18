@@ -7,6 +7,12 @@ from typing import Optional
 from database import get_db, User
 from schemas import UserCreate, UserResponse
 from schemas.response import success_response, error_response, ResponseCode
+from src.core.utils import (
+    normalize_age_group,
+    normalize_gender,
+    normalize_occupation,
+    occupation_to_user_role,
+)
 from auth import (
     get_password_hash,
     verify_password,
@@ -23,6 +29,9 @@ router = APIRouter()
 
 class UserMeUpdate(BaseModel):
     user_role: Optional[str] = None
+    age_group: Optional[str] = None
+    gender: Optional[str] = None
+    occupation: Optional[str] = None
     guardian_name: Optional[str] = None
 
 
@@ -64,6 +73,9 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
                 username=new_user.username,
                 email=new_user.email,
                 user_role=new_user.user_role,
+                age_group=getattr(new_user, "age_group", "unknown"),
+                gender=getattr(new_user, "gender", "unknown"),
+                occupation=getattr(new_user, "occupation", "other"),
                 guardian_name=new_user.guardian_name,
                 theme=new_user.theme,
                 notify_enabled=new_user.notify_enabled,
@@ -104,6 +116,9 @@ async def login(
                 username=user.username,
                 email=user.email,
                 user_role=user.user_role,
+                age_group=getattr(user, "age_group", "unknown"),
+                gender=getattr(user, "gender", "unknown"),
+                occupation=getattr(user, "occupation", "other"),
                 guardian_name=user.guardian_name,
                 theme=user.theme,
                 notify_enabled=user.notify_enabled,
@@ -155,6 +170,9 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
             username=current_user.username,
             email=current_user.email,
             user_role=current_user.user_role,
+            age_group=getattr(current_user, "age_group", "unknown"),
+            gender=getattr(current_user, "gender", "unknown"),
+            occupation=getattr(current_user, "occupation", "other"),
             guardian_name=current_user.guardian_name,
             theme=current_user.theme,
             notify_enabled=current_user.notify_enabled,
@@ -177,12 +195,22 @@ async def update_user_profile(
 ):
     """更新用户信息"""
     resolved_user_role = update_data.user_role if update_data and update_data.user_role is not None else user_role
+    resolved_age_group = update_data.age_group if update_data and update_data.age_group is not None else None
+    resolved_gender = update_data.gender if update_data and update_data.gender is not None else None
+    resolved_occupation = update_data.occupation if update_data and update_data.occupation is not None else None
     resolved_guardian_name = (
         update_data.guardian_name if update_data and update_data.guardian_name is not None else guardian_name
     )
 
-    if resolved_user_role is not None:
-        current_user.user_role = resolved_user_role
+    if resolved_age_group is not None:
+        current_user.age_group = normalize_age_group(resolved_age_group)
+    if resolved_gender is not None:
+        current_user.gender = normalize_gender(resolved_gender)
+    if resolved_occupation is not None:
+        current_user.occupation = normalize_occupation(resolved_occupation)
+        current_user.user_role = occupation_to_user_role(current_user.occupation)
+    elif resolved_user_role is not None:
+        current_user.user_role = occupation_to_user_role(resolved_user_role)
     if resolved_guardian_name is not None:
         current_user.guardian_name = resolved_guardian_name
 
@@ -195,6 +223,9 @@ async def update_user_profile(
             username=current_user.username,
             email=current_user.email,
             user_role=current_user.user_role,
+            age_group=getattr(current_user, "age_group", "unknown"),
+            gender=getattr(current_user, "gender", "unknown"),
+            occupation=getattr(current_user, "occupation", "other"),
             guardian_name=current_user.guardian_name,
             theme=current_user.theme,
             notify_enabled=current_user.notify_enabled,
