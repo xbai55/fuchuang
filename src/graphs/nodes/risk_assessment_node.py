@@ -44,7 +44,10 @@ class RiskAssessmentNode(BaseNode):
         # Perform assessment
         assessment = await self.engine.assess(state)
 
-        return {"risk_assessment": assessment}
+        return {
+            "risk_assessment": assessment,
+            "workflow_metadata": state.workflow_metadata,
+        }
 
     def _extract_input(self, state: GlobalState) -> GlobalState:
         return state

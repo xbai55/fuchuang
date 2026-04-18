@@ -4,6 +4,7 @@ Uses PaddleOCR for Chinese text recognition.
 """
 import asyncio
 import os
+from time import perf_counter
 from pathlib import Path
 from typing import List, Optional
 
@@ -122,6 +123,7 @@ class OCRProcessor(BaseProcessor):
         """Process a single image."""
 
         metadata: dict = {}
+        image_received_at = perf_counter()
         if self._fake_model_error:
             metadata["fake_model_error"] = self._fake_model_error
 
@@ -142,10 +144,12 @@ class OCRProcessor(BaseProcessor):
 
         fake_analysis = None
         if self._fake_analyzer is not None:
+            fake_started_at = perf_counter()
             fake_prob = await run_in_threadpool(
                 self._fake_analyzer.predict_image_path,
                 image_path,
             )
+            metadata["image_fake_analysis_ms"] = round((perf_counter() - fake_started_at) * 1000, 2)
             fake_analysis = FakeAnalysis(
                 is_fake=bool(fake_prob > 0.6),
                 fake_probability=float(fake_prob),
@@ -169,6 +173,8 @@ class OCRProcessor(BaseProcessor):
                     "ai_rate_priority_mode": True,
                     "ocr_skipped_due_to_high_ai_rate": True,
                     "ocr_skip_threshold": skip_threshold,
+                    "ocr_total_ms": round((perf_counter() - image_received_at) * 1000, 2),
+                    "ocr_text_length": 0,
                 }
             )
             return PerceptionResult(
@@ -179,7 +185,9 @@ class OCRProcessor(BaseProcessor):
                 source_media=source_media,
             )
 
+        ocr_started_at = perf_counter()
         result = await self._ocr_processor.process_keyframes([image_path])
+        metadata["ocr_engine_ms"] = round((perf_counter() - ocr_started_at) * 1000, 2)
 
         for item in self._extract_text_items(result):
             confidence = float(item.get("confidence", 0))
@@ -198,6 +206,9 @@ class OCRProcessor(BaseProcessor):
 
         if prefer_ai_rate:
             metadata["ai_rate_priority_mode"] = True
+
+        metadata["ocr_total_ms"] = round((perf_counter() - image_received_at) * 1000, 2)
+        metadata["ocr_text_length"] = len(text_content)
 
         return PerceptionResult(
             text_content=text_content,

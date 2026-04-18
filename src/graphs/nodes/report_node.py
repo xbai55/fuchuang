@@ -44,7 +44,10 @@ class ReportNode(BaseNode):
         # Generate report
         report = await self.generator.generate(state)
 
-        return {"final_report": report}
+        return {
+            "final_report": report,
+            "workflow_metadata": state.workflow_metadata,
+        }
 
     def _extract_input(self, state: GlobalState) -> GlobalState:
         return state

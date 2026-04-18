@@ -157,6 +157,7 @@ export const fraudAPI = {
   detect: async (data: FraudDetectionRequest): Promise<FraudDetectionResponse> => {
     const formData = new FormData();
     formData.append('message', data.message);
+    formData.append('client_request_started_at_ms', String(data.client_request_started_at_ms ?? Date.now()));
 
     if (data.audio_file) {
       formData.append('audio_file', data.audio_file);
@@ -180,6 +181,7 @@ export const fraudAPI = {
   detectAsync: async (data: FraudDetectionRequest): Promise<FraudAsyncResponse> => {
     const formData = new FormData();
     formData.append('message', data.message);
+    formData.append('client_request_started_at_ms', String(data.client_request_started_at_ms ?? Date.now()));
 
     if (data.audio_file) {
       formData.append('audio_file', data.audio_file);

@@ -3,6 +3,7 @@ Risk assessment engine.
 Uses LLM to evaluate fraud risk based on perception and RAG results.
 增强版：集成 RAG RiskDetector 进行精细化评估
 """
+from time import perf_counter
 from typing import Dict, Any, List, Optional
 
 from src.core.models import (
@@ -269,6 +270,8 @@ class RiskEngine:
             RiskAssessment
         """
         # Build context from state
+        total_started_at = perf_counter()
+        prompt_started_at = perf_counter()
         context = self._build_assessment_context(
             state,
             rag_assessment,
@@ -277,14 +280,32 @@ class RiskEngine:
 
         # Build user prompt
         user_prompt = self.user_template.format(**context)
+        timing = dict((state.workflow_metadata or {}).get("performance_timing") or {})
+        timing.update(
+            {
+                "risk_llm_prompt_prepare_ms": round((perf_counter() - prompt_started_at) * 1000, 2),
+                "risk_llm_prompt_chars": len(self.system_prompt) + len(user_prompt),
+            }
+        )
+        state.workflow_metadata["performance_timing"] = timing
 
         try:
             # Call LLM
+            llm_started_at = perf_counter()
             response = await self.llm.achat(
                 system_prompt=self.system_prompt,
                 user_prompt=user_prompt,
                 parse_json=True,
             )
+            timing.update(
+                {
+                    "risk_llm_api_roundtrip_ms": round((perf_counter() - llm_started_at) * 1000, 2),
+                    "risk_llm_total_ms": round((perf_counter() - total_started_at) * 1000, 2),
+                    "risk_llm_model": response.model,
+                    "risk_llm_output_chars": len(response.content or ""),
+                }
+            )
+            state.workflow_metadata["performance_timing"] = timing
 
             # Parse result
             if response.parsed_json:
@@ -302,6 +323,13 @@ class RiskEngine:
                 )
 
         except Exception as e:
+            timing.update(
+                {
+                    "risk_llm_total_ms": round((perf_counter() - total_started_at) * 1000, 2),
+                    "risk_llm_error": str(e),
+                }
+            )
+            state.workflow_metadata["performance_timing"] = timing
             print(f"[错误] 风险评估失败: {e}")
             return self._fallback_assessment(
                 state,

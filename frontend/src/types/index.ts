@@ -114,15 +114,19 @@ export interface FraudDetectionRequest {
   audio_file?: File | null;
   image_file?: File | null;
   video_file?: File | null;
+  client_request_started_at_ms?: number;
 }
 
 export interface FraudDetectionResponse {
   risk_score: number;
+  llm_risk_score?: number | null;
+  llm_risk_score_available?: boolean;
   risk_level: RiskLevel;
   scam_type: string;
   warning_message: string;
   final_report: string;
   guardian_alert: boolean;
+  performance_timing?: Record<string, unknown>;
 }
 
 export interface FraudAlertPayload {
@@ -169,6 +173,7 @@ export interface FraudAsyncResponse {
   poll_url: string;
   ws_url: string;
   early_warning?: FraudEarlyWarning | null;
+  performance_timing?: Record<string, unknown>;
 }
 
 export interface FraudTaskWsMessage {
@@ -179,6 +184,7 @@ export interface FraudTaskWsMessage {
     | 'task_failed'
     | 'error'
     | 'report_stream_started'
+    | 'llm_risk_update'
     | 'report_chunk'
     | 'report_stream_finished';
   task_id: string;
@@ -192,6 +198,12 @@ export interface FraudTaskWsMessage {
   chunk_index?: number;
   total_chunks?: number;
   done?: boolean;
+  risk_score?: number;
+  risk_level?: 'low' | 'medium' | 'high';
+  scam_type?: string;
+  warning_message?: string;
+  guardian_alert?: boolean;
+  is_preliminary?: boolean;
 }
 
 export interface AgentChatRequest {
