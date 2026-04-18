@@ -3,6 +3,7 @@ Perception node for the graph workflow.
 Replaces the old multimodal_input_node.py with the new perception layer.
 """
 from typing import Any, Dict, List
+from time import perf_counter
 
 from langchain_core.runnables import RunnableConfig
 
@@ -73,10 +74,36 @@ class PerceptionNode(BaseNode):
             },
         )
 
+        perception_started_at = perf_counter()
+
         # Process all media
         results = await self.manager.process(media_files, context)
+        performance_timing = dict((state.workflow_metadata or {}).get("performance_timing") or {})
+        performance_timing["perception_total_ms"] = round((perf_counter() - perception_started_at) * 1000, 2)
 
-        return {"perception_results": results}
+        for result in results:
+            source_media = result.source_media
+            media_type = getattr(getattr(source_media, "type", None), "value", None) or str(getattr(source_media, "type", ""))
+            if media_type == "image":
+                metadata = result.metadata or {}
+                if "ocr_total_ms" in metadata:
+                    performance_timing["ocr_image_to_text_ms"] = metadata.get("ocr_total_ms")
+                if "ocr_engine_ms" in metadata:
+                    performance_timing["ocr_engine_ms"] = metadata.get("ocr_engine_ms")
+                if "image_fake_analysis_ms" in metadata:
+                    performance_timing["image_fake_analysis_ms"] = metadata.get("image_fake_analysis_ms")
+                performance_timing["ocr_text_length"] = metadata.get("ocr_text_length", len(result.text_content or ""))
+                performance_timing["ocr_skipped_due_to_high_ai_rate"] = bool(
+                    metadata.get("ocr_skipped_due_to_high_ai_rate", False)
+                )
+
+        workflow_metadata = dict(state.workflow_metadata or {})
+        workflow_metadata["performance_timing"] = performance_timing
+
+        return {
+            "perception_results": results,
+            "workflow_metadata": workflow_metadata,
+        }
 
     def _extract_input(self, state: GlobalState) -> GlobalState:
         """Pass through full state."""

@@ -4,6 +4,7 @@ Compiles all analysis results into a comprehensive report.
 """
 from datetime import datetime
 import re
+from time import perf_counter
 from typing import Any, Dict
 
 from src.core.interfaces import LLMClient
@@ -21,19 +22,48 @@ class ReportGenerator:
 
     async def generate(self, state: GlobalState) -> str:
         """Generate a full report in the user's preferred language."""
+        total_started_at = perf_counter()
         language = self._get_language(state)
+        prompt_started_at = perf_counter()
         context = self._build_context(state, language)
         system_prompt = self._build_system_prompt(language)
         user_prompt = self._build_user_prompt(context, language)
+        prompt_ready_at = perf_counter()
+        timing = dict((state.workflow_metadata or {}).get("performance_timing") or {})
+        timing.update(
+            {
+                "report_prompt_prepare_ms": round((prompt_ready_at - prompt_started_at) * 1000, 2),
+                "report_llm_prompt_chars": len(system_prompt) + len(user_prompt),
+            }
+        )
+        state.workflow_metadata["performance_timing"] = timing
 
         try:
+            llm_started_at = perf_counter()
             response = await self.llm.achat(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 parse_json=False,
             )
+            llm_finished_at = perf_counter()
+            timing.update(
+                {
+                    "report_llm_api_roundtrip_ms": round((llm_finished_at - llm_started_at) * 1000, 2),
+                    "report_llm_total_ms": round((llm_finished_at - total_started_at) * 1000, 2),
+                    "report_llm_model": response.model,
+                    "report_llm_output_chars": len(response.content or ""),
+                }
+            )
+            state.workflow_metadata["performance_timing"] = timing
             return self._format_report(response.content, state, language)
         except Exception as exc:
+            timing.update(
+                {
+                    "report_llm_total_ms": round((perf_counter() - total_started_at) * 1000, 2),
+                    "report_llm_error": str(exc),
+                }
+            )
+            state.workflow_metadata["performance_timing"] = timing
             print(f"[error] report generation failed: {exc}")
             return self._fallback_report(state, language)
 

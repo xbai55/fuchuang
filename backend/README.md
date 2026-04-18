@@ -74,6 +74,7 @@ SECRET_KEY=replace-with-random-secret
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://api.moonshot.cn/v1
 LLM_MODEL=moonshot-v1-8k
+MODEL_MODE=flash
 ```
 
 可选：

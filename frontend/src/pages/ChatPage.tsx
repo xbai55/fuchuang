@@ -30,9 +30,14 @@ interface Message {
   mode?: ChatMode;
   riskScore?: number;
   riskLevel?: 'low' | 'medium' | 'high';
+  quickRiskScore?: number;
+  quickRiskLevel?: 'low' | 'medium' | 'high';
+  llmRiskScore?: number;
+  llmRiskLevel?: 'low' | 'medium' | 'high';
   scamType?: string;
   guardianAlert?: boolean;
   suggestions?: string[];
+  performanceTiming?: Record<string, unknown>;
 }
 
 type ChatMode = 'fraud' | 'agent';
@@ -610,6 +615,113 @@ export default function ChatPage() {
     earlyWarningMessageKeyRef.current = null;
   };
 
+  const formatTimingValue = (key: string, value: unknown) => {
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        return '';
+      }
+      if (key.endsWith('_chars') || key.endsWith('_length') || key.endsWith('_bytes')) {
+        return `${Math.round(value)}`;
+      }
+      return `${value.toFixed(value >= 100 ? 0 : 1)} ms`;
+    }
+    if (typeof value === 'boolean') {
+      return value ? t('是', 'Yes') : t('否', 'No');
+    }
+    if (value === null || value === undefined || value === '') {
+      return '';
+    }
+    return String(value);
+  };
+
+  const buildTimingRows = (timing?: Record<string, unknown>) => {
+    if (!timing) {
+      return [] as Array<[string, string]>;
+    }
+
+    const timingLabels: Array<[string, string, string]> = [
+      ['client_detect_async_roundtrip_ms', '前端提交到异步任务返回', 'Client submit to async task response'],
+      ['client_to_backend_handler_ms_clock_based', '前端发出到后端接收(时钟估算)', 'Client send to backend handler (clock estimate)'],
+      ['image_upload_save_preprocess_ms', '后端接收/保存/图片预处理', 'Backend receive/save/image preprocessing'],
+      ['early_warning_total_ms', '快速预警计算', 'Fast early warning'],
+      ['early_image_ai_warning_ms', '图片AI率快速预警', 'Fast image AI-rate warning'],
+      ['perception_total_ms', '感知层总耗时', 'Perception total'],
+      ['ocr_image_to_text_ms', 'OCR接收图片到生成文字', 'OCR image to text'],
+      ['ocr_engine_ms', 'OCR引擎识别', 'OCR engine recognition'],
+      ['image_fake_analysis_ms', '图片伪造检测', 'Image fake analysis'],
+      ['risk_llm_prompt_prepare_ms', '风险文字整理为LLM输入', 'Risk text prepared for LLM input'],
+      ['risk_llm_api_roundtrip_ms', '风险LLM API往返/处理', 'Risk LLM API roundtrip/processing'],
+      ['risk_llm_total_ms', '风险LLM总耗时', 'Risk LLM total'],
+      ['report_prompt_prepare_ms', '文字整理为LLM输入', 'Text prepared for LLM input'],
+      ['report_llm_first_raw_chunk_ms', 'LLM首个原始片段', 'LLM first raw chunk'],
+      ['report_llm_first_score_ms', 'LLM分数产生', 'LLM score produced'],
+      ['report_llm_first_report_chunk_ms', 'LLM首个报告片段', 'LLM first report chunk'],
+      ['report_llm_api_roundtrip_ms', 'LLM API往返/处理', 'LLM API roundtrip/processing'],
+      ['report_llm_total_ms', '报告LLM总耗时', 'Report LLM total'],
+      ['graph_total_ms', '后端图工作流总耗时', 'Backend graph total'],
+      ['backend_async_worker_total_ms', '后端异步任务总耗时', 'Backend async worker total'],
+      ['backend_async_total_since_handler_ms', '后端从接收到完成总耗时', 'Backend receive to completion total'],
+      ['backend_sync_total_ms', '后端同步总耗时', 'Backend sync total'],
+      ['ocr_text_length', 'OCR文字长度', 'OCR text length'],
+      ['risk_llm_prompt_chars', '发送给风险LLM的字符数', 'Risk LLM prompt chars'],
+      ['risk_llm_output_chars', '风险LLM输出字符数', 'Risk LLM output chars'],
+      ['report_llm_prompt_chars', '发送给LLM的字符数', 'Prompt chars sent to LLM'],
+      ['report_llm_output_chars', 'LLM输出字符数', 'LLM output chars'],
+      ['risk_llm_model', '风险模型', 'Risk model'],
+      ['report_llm_model', '报告模型', 'Report model'],
+      ['report_llm_stream_backend', '报告流式后端', 'Report stream backend'],
+    ];
+
+    return timingLabels
+      .map(([key, zhLabel, enLabel]) => [t(zhLabel, enLabel), formatTimingValue(key, timing[key])] as [string, string])
+      .filter(([, value]) => Boolean(value));
+  };
+
+  const buildEarlyWarningSummary = (earlyWarning: FraudEarlyWarning) => {
+    const clues = (earlyWarning.risk_clues ?? [])
+      .slice(0, 3)
+      .map((item) => `- ${localizeFraudEnglishContent(item)}`)
+      .join('\n');
+
+    return [
+      `### ${t('快速风险预估', 'Fast Risk Estimate')}`,
+      `- ${t('预估等级', 'Estimated Level')}: **${getRiskBadgeText(earlyWarning.risk_level)}**`,
+      `- ${t('预估分数', 'Estimated Score')}: **${earlyWarning.risk_score}/100**`,
+      '',
+      `### ${t('即时响应', 'Immediate Response')}`,
+      localizeFraudEnglishContent(earlyWarning.warning_message),
+      clues ? `\n${t('命中线索', 'Matched Clues')}\n${clues}` : '',
+      '',
+      t('完整风险评估报告正在流式生成。', 'The full risk assessment report is streaming.'),
+    ].filter(Boolean).join('\n');
+  };
+
+  const appendEarlyWarningMessage = (earlyWarning?: FraudEarlyWarning | null) => {
+    if (!earlyWarning) {
+      return;
+    }
+
+    const earlyWarningMessage: Message = {
+      type: 'bot',
+      mode: 'fraud',
+      content: buildEarlyWarningSummary(earlyWarning),
+      detailReport: '',
+      detailStreaming: true,
+      riskScore: earlyWarning.risk_score,
+      riskLevel: earlyWarning.risk_level,
+      quickRiskScore: earlyWarning.risk_score,
+      quickRiskLevel: earlyWarning.risk_level,
+      scamType: t('快速预估', 'Fast estimate'),
+      guardianAlert: earlyWarning.risk_level === 'high',
+    };
+
+    setMessages((prev) => {
+      const createdIndex = prev.length;
+      streamMessageIndexRef.current = createdIndex;
+      return [...prev, earlyWarningMessage];
+    });
+  };
+
   const appendReportChunkMessage = (chunk: string) => {
     if (!chunk) {
       return;
@@ -617,7 +729,6 @@ export default function ChatPage() {
 
     streamedDetailRef.current = `${streamedDetailRef.current}${chunk}`;
     const latestDetail = normalizeMarkdownContent(streamedDetailRef.current);
-    const latestContent = latestDetail || t('详细报告生成中，风险结论即将返回。', 'Detailed report is streaming, risk summary is coming soon.');
 
     setMessages((prev) => {
       const currentIndex = streamMessageIndexRef.current;
@@ -629,7 +740,7 @@ export default function ChatPage() {
           {
             type: 'bot',
             mode: 'fraud',
-            content: latestContent,
+            content: t('快速风险预估已返回，完整风险评估报告正在流式生成。', 'Fast risk estimate is ready. The full risk assessment report is streaming.'),
             detailReport: latestDetail,
             detailStreaming: true,
           },
@@ -639,9 +750,33 @@ export default function ChatPage() {
       const next = [...prev];
       next[currentIndex] = {
         ...next[currentIndex],
-        content: latestContent,
         detailReport: latestDetail,
         detailStreaming: true,
+      };
+      return next;
+    });
+  };
+
+  const updateLlmRiskMessage = (payload: FraudTaskWsMessage) => {
+    if (typeof payload.risk_score !== 'number') {
+      return;
+    }
+    const llmLevel = normalizeRiskLevel(payload.risk_level || '') ?? 'low';
+
+    setMessages((prev) => {
+      const currentIndex = streamMessageIndexRef.current;
+      if (currentIndex === null || currentIndex < 0 || !prev[currentIndex]) {
+        return prev;
+      }
+
+      const next = [...prev];
+      const current = next[currentIndex];
+      next[currentIndex] = {
+        ...current,
+        llmRiskScore: payload.risk_score,
+        llmRiskLevel: llmLevel,
+        scamType: payload.scam_type || current.scamType,
+        guardianAlert: payload.guardian_alert ?? current.guardianAlert,
       };
       return next;
     });
@@ -654,6 +789,9 @@ export default function ChatPage() {
     const normalizedWarning = normalizeFraudWarning(response.warning_message || '', detailFallback);
     const finalDetail = normalizedWarning.detail || detailFallback;
 
+    const responseHasLlmRisk =
+      response.llm_risk_score_available === true && typeof response.llm_risk_score === 'number';
+
     const finalizedMessage: Message = {
       type: 'bot',
       mode: 'fraud',
@@ -662,8 +800,11 @@ export default function ChatPage() {
       detailStreaming: false,
       riskScore: response.risk_score,
       riskLevel: response.risk_level,
+      llmRiskScore: responseHasLlmRisk ? response.llm_risk_score! : undefined,
+      llmRiskLevel: responseHasLlmRisk ? response.risk_level : undefined,
       scamType: response.scam_type,
       guardianAlert: response.guardian_alert,
+      performanceTiming: response.performance_timing,
     };
 
     setMessages((prev) => {
@@ -692,9 +833,14 @@ export default function ChatPage() {
       }
 
       const next = [...prev];
+      const previous = next[targetIndex];
       next[targetIndex] = {
-        ...next[targetIndex],
+        ...previous,
         ...finalizedMessage,
+        quickRiskScore: previous.quickRiskScore,
+        quickRiskLevel: previous.quickRiskLevel,
+        llmRiskScore: previous.llmRiskScore ?? (responseHasLlmRisk ? response.llm_risk_score! : undefined),
+        llmRiskLevel: previous.llmRiskLevel ?? (responseHasLlmRisk ? response.risk_level : undefined),
       };
 
       // Remove stale streaming placeholders if any race created duplicates.
@@ -723,11 +869,14 @@ export default function ChatPage() {
 
     return {
       risk_score: result.risk_score,
+      llm_risk_score: result.llm_risk_score,
+      llm_risk_score_available: result.llm_risk_score_available,
       risk_level: result.risk_level as 'low' | 'medium' | 'high',
       scam_type: result.scam_type ?? '',
       warning_message: result.warning_message ?? '',
       final_report: result.final_report ?? '',
       guardian_alert: Boolean(result.guardian_alert),
+      performance_timing: result.performance_timing,
     };
   };
 
@@ -848,6 +997,11 @@ export default function ChatPage() {
           if (payload.chunk) {
             options?.onReportChunk?.(payload.chunk);
           }
+          return;
+        }
+
+        if (payload.event === 'llm_risk_update') {
+          updateLlmRiskMessage(payload);
           return;
         }
 
@@ -981,10 +1135,15 @@ export default function ChatPage() {
     closeEarlyWarningPopup();
 
     const clueText = earlyWarning.risk_clues && earlyWarning.risk_clues.length > 0
-      ? ` ${t('??', 'Clues')}: ${earlyWarning.risk_clues.slice(0, 2).map((item) => localizeFraudEnglishContent(item)).join('; ')}`
+      ? ` ${t('线索', 'Clues')}: ${earlyWarning.risk_clues.slice(0, 2).map((item) => localizeFraudEnglishContent(item)).join('; ')}`
       : '';
 
-    const content = `${t('????', 'Early Warning')}: ${localizeFraudEnglishContent(earlyWarning.warning_message)}${clueText}`;
+    const scoreAction = earlyWarning.risk_level === 'high'
+      ? t('立即暂停转账、验证码、共享屏幕等敏感操作。', 'Stop transfers, verification codes, and screen sharing immediately.')
+      : earlyWarning.risk_level === 'medium'
+        ? t('先暂停操作，通过官方渠道核验。', 'Pause and verify through official channels first.')
+        : t('保持谨慎，等待完整报告。', 'Stay cautious and wait for the full report.');
+    const content = `${t('预警分数', 'Risk Estimate')}: ${earlyWarning.risk_score}/100 (${getRiskBadgeText(earlyWarning.risk_level)})。${scoreAction} ${localizeFraudEnglishContent(earlyWarning.warning_message)}${clueText}`;
     const popupType = earlyWarning.risk_level === 'low' ? 'info' : 'warning';
     const popupKey = `fraud-early-warning-${Date.now()}`;
     earlyWarningMessageKeyRef.current = popupKey;
@@ -1034,14 +1193,30 @@ export default function ChatPage() {
 
     try {
       if (isFraudMode) {
+        const clientRequestStartedAtMs = Date.now();
+        const detectAsyncStartedAt = performance.now();
         const task = await fraudAPI.detectAsync({
           message: detectionMessage,
           audio_file: audioFile ?? undefined,
           image_file: imageFile ?? undefined,
           video_file: videoFile ?? undefined,
+          client_request_started_at_ms: clientRequestStartedAtMs,
         });
+        const clientDetectAsyncRoundtripMs = performance.now() - detectAsyncStartedAt;
 
         showEarlyWarningPopup(
+          task.early_warning ?? {
+            risk_score: 0,
+            risk_level: 'low',
+            warning_message: t(
+              '已启动快速预警，正在生成完整分析结果。',
+              'Fast early warning started. Full analysis is in progress.',
+            ),
+            source: 'frontend_fallback',
+            is_preliminary: true,
+          },
+        );
+        appendEarlyWarningMessage(
           task.early_warning ?? {
             risk_score: 0,
             risk_level: 'low',
@@ -1063,6 +1238,14 @@ export default function ChatPage() {
           console.warn(t('实时推送失败，降级为轮询', 'Realtime push failed, fallback to polling'), wsError);
           response = await waitForTaskByPolling(task.task_id);
         }
+        response = {
+          ...response,
+          performance_timing: {
+            ...(task.performance_timing ?? {}),
+            ...(response.performance_timing ?? {}),
+            client_detect_async_roundtrip_ms: Number(clientDetectAsyncRoundtripMs.toFixed(2)),
+          },
+        };
 
         finalizeFraudStreamMessage(response);
         closeEarlyWarningPopup();
@@ -1136,7 +1319,65 @@ export default function ChatPage() {
     return filename.slice(dotIndex).toLowerCase();
   };
 
-  const beforeUpload = (file: File, fileType: UploadMediaType) => {
+  const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string, quality: number) => {
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, mimeType, quality);
+    });
+  };
+
+  const compressImageFile = async (file: File): Promise<File> => {
+    if (!file.type.startsWith('image/') || file.type === 'image/gif') {
+      return file;
+    }
+
+    const maxEdge = 1600;
+    const targetQuality = 0.78;
+    const minUsefulSaving = 0.92;
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('image decode failed'));
+        img.src = objectUrl;
+      });
+
+      const sourceWidth = image.naturalWidth || image.width;
+      const sourceHeight = image.naturalHeight || image.height;
+      const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return file;
+      }
+
+      context.drawImage(image, 0, 0, width, height);
+      const outputType = 'image/jpeg';
+      const blob = await canvasToBlob(canvas, outputType, targetQuality);
+      if (!blob || blob.size >= file.size * minUsefulSaving) {
+        return file;
+      }
+
+      const baseName = (file.name || 'image').replace(/\.[^.]+$/, '');
+      return new File([blob], `${baseName}_compressed.jpg`, {
+        type: outputType,
+        lastModified: Date.now(),
+      });
+    } catch (error) {
+      console.warn(t('图片压缩失败，使用原图上传', 'Image compression failed, uploading original'), error);
+      return file;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  const beforeUpload = async (file: File, fileType: UploadMediaType) => {
     const validMimeTypes: Record<UploadMediaType, string[]> = {
       audio: ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp3', 'audio/mp4', 'audio/x-m4a'],
       image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
@@ -1176,9 +1417,11 @@ export default function ChatPage() {
       return Upload.LIST_IGNORE;
     }
 
-    if (fileType === 'audio') setAudioFile(file);
-    if (fileType === 'image') setImageFile(file);
-    if (fileType === 'video') setVideoFile(file);
+    const uploadFile = fileType === 'image' ? await compressImageFile(file) : file;
+
+    if (fileType === 'audio') setAudioFile(uploadFile);
+    if (fileType === 'image') setImageFile(uploadFile);
+    if (fileType === 'video') setVideoFile(uploadFile);
     return false;
   };
 
@@ -1213,7 +1456,7 @@ export default function ChatPage() {
     setInputDropActive(false);
   };
 
-  const handleDroppedFiles = (files: Iterable<File>) => {
+  const handleDroppedFiles = async (files: Iterable<File>) => {
     const droppedList = Array.from(files || []);
     if (droppedList.length === 0) {
       return;
@@ -1258,7 +1501,7 @@ export default function ChatPage() {
       if (!droppedFile) {
         continue;
       }
-      const result = beforeUpload(droppedFile, fileType);
+      const result = await beforeUpload(droppedFile, fileType);
       if (result !== Upload.LIST_IGNORE && !firstAcceptedTab) {
         firstAcceptedTab = fileType;
       }
@@ -1467,7 +1710,7 @@ export default function ChatPage() {
     stringPayloads: string[],
   ) => {
     if (directFiles.length > 0) {
-      handleDroppedFiles(directFiles);
+      await handleDroppedFiles(directFiles);
       return;
     }
 
@@ -1507,7 +1750,7 @@ export default function ChatPage() {
     }
 
     if (convertedFiles.length > 0) {
-      handleDroppedFiles(convertedFiles);
+      await handleDroppedFiles(convertedFiles);
       return;
     }
 
@@ -1728,11 +1971,23 @@ export default function ChatPage() {
                       >
                         {msg.type === 'bot' ? (
                           <>
-                            {msg.riskScore !== undefined ? (
-                              <div className="mb-1 flex items-center gap-2">
-                                <span className={getRiskBadgeClass(msg.riskLevel ?? 'low')}>
-                                  {getRiskBadgeText(msg.riskLevel ?? 'low')} ({msg.riskScore}/100)
-                                </span>
+                            {msg.quickRiskScore !== undefined || msg.llmRiskScore !== undefined || msg.riskScore !== undefined ? (
+                              <div className="mb-1 flex flex-wrap items-center gap-2">
+                                {msg.quickRiskScore !== undefined ? (
+                                  <span className={getRiskBadgeClass(msg.quickRiskLevel ?? 'low')}>
+                                    {t('快速预警', 'Fast')} {getRiskBadgeText(msg.quickRiskLevel ?? 'low')} ({msg.quickRiskScore}/100)
+                                  </span>
+                                ) : null}
+                                {msg.llmRiskScore !== undefined ? (
+                                  <span className={getRiskBadgeClass(msg.llmRiskLevel ?? 'low')}>
+                                    {t('LLM评估', 'LLM')} {getRiskBadgeText(msg.llmRiskLevel ?? 'low')} ({msg.llmRiskScore}/100)
+                                  </span>
+                                ) : null}
+                                {msg.quickRiskScore === undefined && msg.llmRiskScore === undefined && msg.riskScore !== undefined ? (
+                                  <span className={getRiskBadgeClass(msg.riskLevel ?? 'low')}>
+                                    {getRiskBadgeText(msg.riskLevel ?? 'low')} ({msg.riskScore}/100)
+                                  </span>
+                                ) : null}
                                 {msg.scamType ? <span className="text-xs text-gray-400">{msg.scamType}</span> : null}
                               </div>
                             ) : null}
@@ -1810,6 +2065,21 @@ export default function ChatPage() {
                             {msg.guardianAlert ? (
                               <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-red-400">
                                 {t('已触发监护预警', 'Guardian alert triggered')}
+                              </div>
+                            ) : null}
+                            {msg.mode === 'fraud' && msg.performanceTiming ? (
+                              <div className="mt-2 rounded-lg border border-cyan-500/25 bg-cyan-500/10 p-3 text-xs text-cyan-50">
+                                <div className="mb-2 font-medium text-cyan-100">
+                                  {t('性能耗时', 'Performance Timing')}
+                                </div>
+                                <div className="grid gap-1 sm:grid-cols-2">
+                                  {buildTimingRows(msg.performanceTiming).map(([label, value]) => (
+                                    <div key={label} className="flex min-w-0 justify-between gap-3">
+                                      <span className="truncate text-cyan-200/80">{label}</span>
+                                      <span className="shrink-0 font-mono text-cyan-50">{value}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             ) : null}
                           </>
