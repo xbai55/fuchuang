@@ -144,12 +144,10 @@ class OCRProcessor(BaseProcessor):
 
         fake_analysis = None
         if self._fake_analyzer is not None:
-            fake_started_at = perf_counter()
             fake_prob = await run_in_threadpool(
                 self._fake_analyzer.predict_image_path,
                 image_path,
             )
-            metadata["image_fake_analysis_ms"] = round((perf_counter() - fake_started_at) * 1000, 2)
             fake_analysis = FakeAnalysis(
                 is_fake=bool(fake_prob > 0.6),
                 fake_probability=float(fake_prob),
@@ -168,15 +166,7 @@ class OCRProcessor(BaseProcessor):
             and fake_analysis is not None
             and float(fake_analysis.fake_probability) >= skip_threshold
         ):
-            metadata.update(
-                {
-                    "ai_rate_priority_mode": True,
-                    "ocr_skipped_due_to_high_ai_rate": True,
-                    "ocr_skip_threshold": skip_threshold,
-                    "ocr_total_ms": round((perf_counter() - image_received_at) * 1000, 2),
-                    "ocr_text_length": 0,
-                }
-            )
+            metadata["ocr_total_ms"] = round((perf_counter() - image_received_at) * 1000, 2)
             return PerceptionResult(
                 text_content="",
                 fake_analysis=fake_analysis,
@@ -185,9 +175,7 @@ class OCRProcessor(BaseProcessor):
                 source_media=source_media,
             )
 
-        ocr_started_at = perf_counter()
         result = await self._ocr_processor.process_keyframes([image_path])
-        metadata["ocr_engine_ms"] = round((perf_counter() - ocr_started_at) * 1000, 2)
 
         for item in self._extract_text_items(result):
             confidence = float(item.get("confidence", 0))
@@ -204,11 +192,7 @@ class OCRProcessor(BaseProcessor):
         summary = self._extract_summary_texts(result)
         text_content = " ".join(summary) if summary else " ".join(texts)
 
-        if prefer_ai_rate:
-            metadata["ai_rate_priority_mode"] = True
-
         metadata["ocr_total_ms"] = round((perf_counter() - image_received_at) * 1000, 2)
-        metadata["ocr_text_length"] = len(text_content)
 
         return PerceptionResult(
             text_content=text_content,

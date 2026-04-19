@@ -764,7 +764,6 @@ async def _run_single_pass_detection_stream(
         if llm is None:
             raise RuntimeError("LLM API key 未配置，无法启用单次流式分析")
 
-    prompt_started_at = perf_counter()
     user_prompt = _build_single_pass_user_prompt(
         message=message,
         user_role=user_role,
@@ -778,7 +777,6 @@ async def _run_single_pass_detection_stream(
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
-    prompt_prepare_ms = _elapsed_ms(prompt_started_at)
 
     task_manager.publish_task_event(task_id, {"event": "report_stream_started", "stream_mode": "token"})
 
@@ -787,18 +785,10 @@ async def _run_single_pass_detection_stream(
     marker_seen = False
     chunk_count = 0
     llm_started_at = perf_counter()
-    first_raw_chunk_ms = None
-    first_report_chunk_ms = None
-    first_llm_score_ms = None
     llm_metadata: dict[str, Any] = {}
     published_metadata: dict[str, Any] = {}
-    stream_backend = "unknown"
 
     def publish_metadata_if_changed(force: bool = False) -> None:
-        nonlocal first_llm_score_ms
-        if "risk_score" in llm_metadata and first_llm_score_ms is None:
-            first_llm_score_ms = _elapsed_ms(llm_started_at)
-
         changed = force or any(published_metadata.get(key) != value for key, value in llm_metadata.items())
         if not changed or "risk_score" not in llm_metadata:
             return
@@ -813,20 +803,14 @@ async def _run_single_pass_detection_stream(
             },
         )
 
-    async for chunk_text, backend_name in _stream_single_pass_chunks(messages, model_config, system_prompt):
-        stream_backend = backend_name
+    async for chunk_text, _backend_name in _stream_single_pass_chunks(messages, model_config, system_prompt):
         if not chunk_text:
             continue
-
-        if first_raw_chunk_ms is None:
-            first_raw_chunk_ms = _elapsed_ms(llm_started_at)
 
         raw_parts.append(chunk_text)
 
         if marker_seen:
             chunk_count += 1
-            if first_report_chunk_ms is None:
-                first_report_chunk_ms = _elapsed_ms(llm_started_at)
             task_manager.publish_task_event(
                 task_id,
                 {
@@ -851,8 +835,7 @@ async def _run_single_pass_detection_stream(
             buffered_prefix = ""
             if report_text_after_marker:
                 chunk_count += 1
-                if first_report_chunk_ms is None:
-                    first_report_chunk_ms = _elapsed_ms(llm_started_at)
+
                 task_manager.publish_task_event(
                     task_id,
                     {
@@ -889,8 +872,7 @@ async def _run_single_pass_detection_stream(
                 marker_seen = True
                 buffered_prefix = ""
                 chunk_count += 1
-                if first_report_chunk_ms is None:
-                    first_report_chunk_ms = _elapsed_ms(llm_started_at)
+
                 task_manager.publish_task_event(
                     task_id,
                     {
@@ -927,18 +909,8 @@ async def _run_single_pass_detection_stream(
         memory_context=memory_context,
     )
     parsed_result["performance_timing"] = {
-        "report_prompt_prepare_ms": prompt_prepare_ms,
-        "report_llm_prompt_chars": len(system_prompt) + len(user_prompt),
-        "report_llm_first_raw_chunk_ms": first_raw_chunk_ms,
-        "report_llm_first_score_ms": first_llm_score_ms,
-        "report_llm_first_report_chunk_ms": first_report_chunk_ms,
         "report_llm_api_roundtrip_ms": _elapsed_ms(llm_started_at),
         "report_llm_total_ms": _elapsed_ms(total_started_at),
-        "report_llm_model": str(model_config.get("model") or ""),
-        "report_llm_stream_backend": stream_backend,
-        "report_llm_output_chars": len(raw_output),
-        "single_pass_stream_mode": True,
-        "single_pass_prompt_mode": model_mode,
     }
 
     return parsed_result, chunk_count
@@ -1501,25 +1473,15 @@ def _save_uploads_with_timing(
 
     audio_path = None
     if audio_file:
-        started_at = perf_counter()
         audio_path = _save_temp_file(audio_file)
-        timing["audio_upload_save_ms"] = _elapsed_ms(started_at)
 
     image_path = None
     if image_file:
-        started_at = perf_counter()
         image_path = _save_temp_file(image_file, preprocess_image=True)
-        timing["image_upload_save_preprocess_ms"] = _elapsed_ms(started_at)
-        try:
-            timing["image_temp_size_bytes"] = os.path.getsize(image_path)
-        except OSError:
-            pass
 
     video_path = None
     if video_file:
-        started_at = perf_counter()
         video_path = _save_temp_file(video_file)
-        timing["video_upload_save_ms"] = _elapsed_ms(started_at)
 
     return audio_path, image_path, video_path, timing
 
@@ -1527,14 +1489,6 @@ def _save_uploads_with_timing(
 def _merge_image_ocr_timing(performance_timing: dict[str, Any], metadata: dict[str, Any]) -> None:
     if "ocr_total_ms" in metadata:
         performance_timing["ocr_image_to_text_ms"] = metadata.get("ocr_total_ms")
-    if "ocr_engine_ms" in metadata:
-        performance_timing["ocr_engine_ms"] = metadata.get("ocr_engine_ms")
-    if "image_fake_analysis_ms" in metadata:
-        performance_timing["image_fake_analysis_ms"] = metadata.get("image_fake_analysis_ms")
-    performance_timing["ocr_text_length"] = metadata.get("ocr_text_length", 0)
-    performance_timing["ocr_skipped_due_to_high_ai_rate"] = bool(
-        metadata.get("ocr_skipped_due_to_high_ai_rate", False)
-    )
 
 
 def _build_media_fake_warning(modality: str, fake_probability: Optional[float]) -> Optional[dict[str, Any]]:
@@ -1647,7 +1601,6 @@ async def _extract_image_text_for_single_pass(
     print(
         "[OCR] image received-to-text "
         f"{performance_timing.get('ocr_image_to_text_ms', performance_timing['perception_total_ms'])} ms; "
-        f"engine {performance_timing.get('ocr_engine_ms', 'n/a')} ms; "
         f"text_len {len(result.text_content or '')}"
     )
     return (result.text_content or "").strip()
@@ -1666,13 +1619,10 @@ async def _extract_audio_text_for_single_pass(
         context=context,
     )
     performance_timing["audio_perception_total_ms"] = _elapsed_ms(perception_started_at)
-    performance_timing["audio_asr_text_length"] = len(result.text_content or "")
-    performance_timing["audio_asr_available"] = bool((result.metadata or {}).get("asr_available", False))
 
     fake_probability = None
     if result.fake_analysis is not None:
         fake_probability = float(result.fake_analysis.fake_probability)
-        performance_timing["audio_fake_probability"] = fake_probability
 
     warning = _build_media_fake_warning("音频", fake_probability)
     return (result.text_content or "").strip(), warning
@@ -1691,13 +1641,10 @@ async def _extract_video_text_for_single_pass(
         context=context,
     )
     performance_timing["video_perception_total_ms"] = _elapsed_ms(perception_started_at)
-    performance_timing["video_ocr_text_length"] = len(result.text_content or "")
-    performance_timing["video_keyframe_count"] = int((result.metadata or {}).get("keyframe_count", 0) or 0)
 
     fake_probability = None
     if result.fake_analysis is not None:
         fake_probability = float(result.fake_analysis.fake_probability)
-        performance_timing["video_fake_probability"] = fake_probability
 
     warning = _build_media_fake_warning("视频", fake_probability)
     return (result.text_content or "").strip(), warning
@@ -1827,15 +1774,7 @@ async def detect_fraud(
         has_image=bool(image_file),
     )
     monitor_model_name = "fraud_detection_single_pass" if use_single_pass else "fraud_detection_graph"
-    performance_timing: dict[str, Any] = {
-        "server_handler_started_epoch_ms": server_handler_epoch_ms,
-        "model_mode": model_mode,
-    }
-    if client_request_started_at_ms:
-        performance_timing["client_to_backend_handler_ms_clock_based"] = round(
-            server_handler_epoch_ms - float(client_request_started_at_ms),
-            2,
-        )
+    performance_timing: dict[str, Any] = {}
 
     try:
         audio_path, image_path, video_path, upload_timing = _save_uploads_with_timing(
@@ -1858,11 +1797,8 @@ async def detect_fraud(
                     _build_fast_image_ai_warning(image_path),
                     timeout=1.2,
                 )
-                performance_timing["early_image_ai_warning_ms"] = _elapsed_ms(image_ai_started_at)
-            except asyncio.TimeoutError:
-                performance_timing["early_image_ai_warning_timeout_ms"] = 1200
-            except Exception as exc:
-                performance_timing["early_image_ai_warning_error"] = str(exc)
+            except (asyncio.TimeoutError, Exception):
+                pass
 
         if use_single_pass:
             single_pass_message = message
@@ -2052,15 +1988,7 @@ async def detect_fraud_async(
         has_video=bool(video_file),
         has_image=bool(image_file),
     )
-    performance_timing: dict[str, Any] = {
-        "server_handler_started_epoch_ms": server_handler_epoch_ms,
-        "model_mode": model_mode,
-    }
-    if client_request_started_at_ms:
-        performance_timing["client_to_backend_handler_ms_clock_based"] = round(
-            server_handler_epoch_ms - float(client_request_started_at_ms),
-            2,
-        )
+    performance_timing: dict[str, Any] = {}
 
     try:
         input_summary = message[:50] if message else "fraud-detection"
@@ -2099,12 +2027,9 @@ async def detect_fraud_async(
                     _build_fast_image_ai_warning(image_path),
                     timeout=1.2,
                 )
-                performance_timing["early_image_ai_warning_ms"] = _elapsed_ms(image_ai_started_at)
             except asyncio.TimeoutError:
-                performance_timing["early_image_ai_warning_timeout_ms"] = 1200
                 print("[预警] 图片AI率快速检测超时，继续执行规则/RAG预警")
             except Exception as exc:
-                performance_timing["early_image_ai_warning_error"] = str(exc)
                 print(f"[预警] 图片AI率快速检测失败: {exc}")
 
         early_warning_started_at = perf_counter()
