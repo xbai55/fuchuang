@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from auth import decode_token, get_current_active_user
 from database import ChatHistory, Contact, SessionLocal, User, get_db
+from email_notifier import attach_email_notification, send_high_risk_email_if_needed
 from graph_core.graph_client import graph_client
 from graph_core.task_manager import TaskStatus, task_manager
 from schemas import FeedbackRequest
@@ -1976,6 +1977,14 @@ async def detect_fraud(
                 **dict(result.get("performance_timing") or {}),
             }
 
+        email_notification = await send_high_risk_email_if_needed(
+            receiver=current_user.email,
+            result=result,
+            notify_enabled=current_user.notify_enabled,
+            notify_high_risk=current_user.notify_high_risk,
+        )
+        attach_email_notification(result, email_notification)
+
         db.add(
             ChatHistory(
                 user_id=current_user.id,
@@ -2067,7 +2076,9 @@ async def detect_fraud_async(
         user_id = current_user.id
         user_role = normalize_user_role(current_user.user_role)
         fallback_guardian_name = current_user.guardian_name
+        receiver_email = current_user.email
         notify_enabled = current_user.notify_enabled
+        notify_high_risk = current_user.notify_high_risk
         notify_guardian_alert = current_user.notify_guardian_alert
         memory_context = _build_user_memory_context(db, current_user, message)
 
@@ -2324,6 +2335,13 @@ async def detect_fraud_async(
                     "backend_async_worker_total_ms": _elapsed_ms(started_at),
                     "backend_async_total_since_handler_ms": _elapsed_ms(endpoint_started_at),
                 }
+                email_notification = await send_high_risk_email_if_needed(
+                    receiver=receiver_email,
+                    result=result,
+                    notify_enabled=notify_enabled,
+                    notify_high_risk=notify_high_risk,
+                )
+                attach_email_notification(result, email_notification)
                 detection_payload = _build_detection_payload(result)
                 task_manager.complete_task(task.task_id, detection_payload)
 

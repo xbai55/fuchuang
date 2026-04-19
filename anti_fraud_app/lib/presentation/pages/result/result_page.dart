@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../../../data/models/detection_result.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/markdown_text.dart';
 
 /// 检测结果页面
 /// 展示 AI 分析结果，高风险时带有红色呼吸灯效果
@@ -9,16 +10,15 @@ class ResultPage extends StatefulWidget {
   final DetectionResult result;
 
   const ResultPage({
-    Key? key,
+    super.key,
     required this.result,
-  }) : super(key: key);
+  });
 
   @override
   State<ResultPage> createState() => _ResultPageState();
 }
 
-class _ResultPageState extends State<ResultPage>
-    with TickerProviderStateMixin {
+class _ResultPageState extends State<ResultPage> with TickerProviderStateMixin {
   late AnimationController _breathingController;
   late Animation<double> _breathingAnimation;
 
@@ -63,7 +63,7 @@ class _ResultPageState extends State<ResultPage>
           final backgroundColor = widget.result.isHighRisk
               ? Color.lerp(
                   AppTheme.backgroundColor,
-                  Colors.red.withOpacity(0.15),
+                  Colors.red.withValues(alpha: 0.15),
                   _breathingAnimation.value * 0.5,
                 )
               : AppTheme.backgroundColor;
@@ -102,7 +102,7 @@ class _ResultPageState extends State<ResultPage>
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
       child: Row(
         children: [
           IconButton(
@@ -150,8 +150,8 @@ class _ResultPageState extends State<ResultPage>
                     height: 180 + _breathingAnimation.value * 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.red.withOpacity(
-                        0.1 + _breathingAnimation.value * 0.2,
+                      color: Colors.red.withValues(
+                        alpha: 0.1 + _breathingAnimation.value * 0.2,
                       ),
                     ),
                   );
@@ -190,7 +190,7 @@ class _ResultPageState extends State<ResultPage>
                           Text(
                             '风险分',
                             style: TextStyle(
-                              color: color.withOpacity(0.7),
+                              color: color.withValues(alpha: 0.7),
                               fontSize: 12,
                             ),
                           ),
@@ -210,9 +210,9 @@ class _ResultPageState extends State<ResultPage>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: color.withOpacity(0.5), width: 2),
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
           ),
           child: Text(
             title,
@@ -247,8 +247,8 @@ class _ResultPageState extends State<ResultPage>
                   children: [
                     Icon(
                       Icons.warning_rounded,
-                      color: Colors.red.withOpacity(
-                        0.7 + _breathingAnimation.value * 0.3,
+                      color: Colors.red.withValues(
+                        alpha: 0.7 + _breathingAnimation.value * 0.3,
                       ),
                       size: 24,
                     ),
@@ -256,8 +256,8 @@ class _ResultPageState extends State<ResultPage>
                     Text(
                       '⚠️ 高危诈骗警告',
                       style: TextStyle(
-                        color: Colors.red.withOpacity(
-                          0.8 + _breathingAnimation.value * 0.2,
+                        color: Colors.red.withValues(
+                          alpha: 0.8 + _breathingAnimation.value * 0.2,
                         ),
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -279,13 +279,13 @@ class _ResultPageState extends State<ResultPage>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            _getRiskColor().withOpacity(0.2),
-            _getRiskColor().withOpacity(0.05),
+            _getRiskColor().withValues(alpha: 0.2),
+            _getRiskColor().withValues(alpha: 0.05),
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: _getRiskColor().withOpacity(0.3),
+          color: _getRiskColor().withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -306,7 +306,7 @@ class _ResultPageState extends State<ResultPage>
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          MarkdownText(
             widget.result.warningMessage,
             style: const TextStyle(
               color: Colors.white,
@@ -324,9 +324,9 @@ class _ResultPageState extends State<ResultPage>
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.outlineColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,10 +346,10 @@ class _ResultPageState extends State<ResultPage>
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          MarkdownText(
             widget.result.finalReport,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               fontSize: 14,
               height: 1.6,
             ),
@@ -359,9 +359,9 @@ class _ResultPageState extends State<ResultPage>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: const Row(
                 children: [
@@ -384,14 +384,14 @@ class _ResultPageState extends State<ResultPage>
 
   Widget _buildBottomActions() {
     return Container(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
             AppTheme.backgroundColor,
-            AppTheme.backgroundColor.withOpacity(0),
+            AppTheme.backgroundColor.withValues(alpha: 0),
           ],
         ),
       ),
@@ -406,7 +406,7 @@ class _ResultPageState extends State<ResultPage>
               label: const Text('分享'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white70,
-                side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
@@ -419,7 +419,7 @@ class _ResultPageState extends State<ResultPage>
               label: const Text('我已了解'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
+                foregroundColor: const Color(0xFF04201C),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
@@ -432,11 +432,11 @@ class _ResultPageState extends State<ResultPage>
   Color _getRiskColor() {
     switch (widget.result.riskLevel) {
       case 'high':
-        return const Color(0xFFFF4444);
+        return AppTheme.errorColor;
       case 'medium':
-        return const Color(0xFFFF8800);
+        return AppTheme.warningColor;
       case 'low':
-        return const Color(0xFF44AA44);
+        return AppTheme.successColor;
       default:
         return Colors.grey;
     }
@@ -475,7 +475,7 @@ class _RiskRingPainter extends CustomPainter {
 
     // 背景圆环
     final bgPaint = Paint()
-      ..color = Colors.white.withOpacity(0.1)
+      ..color = Colors.white.withValues(alpha: 0.1)
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -489,14 +489,14 @@ class _RiskRingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..shader = SweepGradient(
-        colors: [color, color.withOpacity(0.5)],
+        colors: [color, color.withValues(alpha: 0.5)],
         startAngle: -math.pi / 2,
         endAngle: -math.pi / 2 + 2 * math.pi * progress,
       ).createShader(
         Rect.fromCircle(center: center, radius: radius),
       );
 
-    final startAngle = -math.pi / 2;
+    const startAngle = -math.pi / 2;
     final sweepAngle = 2 * math.pi * progress;
 
     canvas.drawArc(

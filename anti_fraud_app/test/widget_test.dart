@@ -1,30 +1,38 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anti_fraud_app/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('AntiFraudApp renders core mobile flows',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const AntiFraudApp(bypassAuth: true));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('天枢明御'), findsWidgets);
+    expect(find.text('快速检测'), findsOneWidget);
+    expect(find.text('智能检测'), findsOneWidget);
+
+    await tester.tap(find.text('反诈助手'));
+    await tester.pump();
+
+    expect(find.text('有疑问，先问清楚'), findsOneWidget);
+
+    await tester.tap(find.text('历史记录'));
+    await tester.pump();
+
+    expect(find.text('历史记录'), findsWidgets);
+  });
+
+  testWidgets('send button starts detection from home input',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const AntiFraudApp(bypassAuth: true));
+    await tester.pump();
+
+    await tester.enterText(find.byType(EditableText).first, '可疑客服要求先转账');
+    await tester.tap(find.byKey(const ValueKey('send-detection-button')));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 }

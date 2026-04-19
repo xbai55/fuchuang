@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -49,10 +47,10 @@ class ApiClient {
         }
 
         if (kDebugMode) {
-          print('🌐 [${options.method}] ${options.path}');
-          print('Headers: ${options.headers}');
+          debugPrint('🌐 [${options.method}] ${options.path}');
+          debugPrint('Headers: ${options.headers}');
           if (options.data != null) {
-            print('Data: ${options.data}');
+            debugPrint('Data: ${options.data}');
           }
         }
 
@@ -60,21 +58,25 @@ class ApiClient {
       },
       onResponse: (response, handler) {
         if (kDebugMode) {
-          print('✅ [${response.statusCode}] ${response.requestOptions.path}');
-          print('Response: ${response.data}');
+          debugPrint(
+              '✅ [${response.statusCode}] ${response.requestOptions.path}');
+          debugPrint('Response: ${response.data}');
         }
         return handler.next(response);
       },
       onError: (error, handler) async {
         if (kDebugMode) {
-          print('❌ [${error.response?.statusCode}] ${error.requestOptions.path}');
-          print('Error: ${error.message}');
+          debugPrint(
+              '❌ [${error.response?.statusCode}] ${error.requestOptions.path}');
+          debugPrint('Error: ${error.message}');
         }
 
         // 处理 Token 过期
         if (error.response?.statusCode == 401) {
           final errorData = error.response?.data;
-          if (errorData != null && errorData['code'] == 4001) {
+          final hasRefreshToken = _storage.getRefreshToken() != null;
+          if (hasRefreshToken ||
+              (errorData != null && errorData['code'] == 4001)) {
             // Token 过期，尝试刷新
             final refreshed = await _refreshToken();
             if (refreshed) {
@@ -99,6 +101,109 @@ class ApiClient {
         requestBody: true,
         responseBody: true,
       ));
+    }
+  }
+
+  /// 确保移动端有可用登录态。当前 App 暂无登录页，开发环境下创建/复用本机游客账号。
+  Future<void> ensureAuthenticated() async {
+    if (_storage.getAccessToken() != null) {
+      return;
+    }
+
+    if (_storage.getRefreshToken() != null && await _refreshToken()) {
+      return;
+    }
+
+    final username = _storage.getMobileUsername() ??
+        'mobile_${DateTime.now().millisecondsSinceEpoch}';
+    const password = ApiConstants.mobileDefaultPassword;
+
+    try {
+      await loginWithPassword(username: username, password: password);
+      await _storage.setMobileUsername(username);
+      return;
+    } on ApiException {
+      // 账号不存在或密码不匹配时继续尝试注册一个本机游客账号。
+    }
+
+    final createdUsername = 'mobile_${DateTime.now().millisecondsSinceEpoch}';
+    await registerAccount(
+      username: createdUsername,
+      email: '$createdUsername@tianshumingyu.com',
+      password: password,
+    );
+    await _storage.setMobileUsername(createdUsername);
+  }
+
+  Future<Map<String, dynamic>> loginWithPassword({
+    required String username,
+    required String password,
+  }) async {
+    final formData = FormData.fromMap({
+      'username': username,
+      'password': password,
+    });
+
+    final response = await _dio.post(
+      ApiConstants.login,
+      data: formData,
+      options: Options(
+        headers: {'Content-Type': 'multipart/form-data'},
+        validateStatus: _acceptBackendBusinessStatus,
+      ),
+    );
+
+    final data = _parseResponse(response) as Map<String, dynamic>;
+    await saveAuthData(data);
+    return data;
+  }
+
+  Future<Map<String, dynamic>> registerAccount({
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    final response = await _dio.post(
+      ApiConstants.register,
+      data: {
+        'username': username,
+        'email': email,
+        'password': password,
+      },
+      options: Options(validateStatus: _acceptBackendBusinessStatus),
+    );
+
+    final data = _parseResponse(response) as Map<String, dynamic>;
+    await saveAuthData(data);
+    return data;
+  }
+
+  Future<void> saveAuthData(Map<String, dynamic> data) async {
+    final accessToken = data['access_token'] as String?;
+    final refreshToken = data['refresh_token'] as String?;
+
+    if (accessToken == null || refreshToken == null) {
+      throw ApiException(message: '登录响应缺少 Token', code: -1);
+    }
+
+    await _storage.setAccessToken(accessToken);
+    await _storage.setRefreshToken(refreshToken);
+
+    final user = data['user'];
+    if (user is Map<String, dynamic>) {
+      await _storage.setUserInfo(user);
+    }
+  }
+
+  Future<void> clearSession() async {
+    try {
+      if (_storage.getAccessToken() != null) {
+        await _dio.post(ApiConstants.logout);
+      }
+    } catch (_) {
+      // 本地退出优先，服务端登出失败不阻断用户离开当前会话。
+    } finally {
+      await _storage.clearAll();
     }
   }
 
@@ -137,7 +242,7 @@ class ApiClient {
         return true;
       }
     } catch (e) {
-      print('Refresh token failed: $e');
+      debugPrint('Refresh token failed: $e');
     } finally {
       _isRefreshing = false;
     }
@@ -181,6 +286,7 @@ class ApiClient {
     // 业务错误
     switch (code) {
       case 400:
+        throw BadRequestException(message: message, code: code);
       case 4001:
         throw TokenExpiredException();
       case 401:
@@ -197,6 +303,10 @@ class ApiClient {
       default:
         throw BusinessException(message: message, code: code);
     }
+  }
+
+  bool _acceptBackendBusinessStatus(int? status) {
+    return status != null && status < 500;
   }
 
   /// GET 请求
@@ -280,6 +390,24 @@ class ApiClient {
     }
   }
 
+  /// PATCH 请求
+  Future<T?> patch<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await _dio.patch(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      );
+      return _parseResponse(response);
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    }
+  }
+
   /// DELETE 请求
   Future<T?> delete<T>(
     String path, {
@@ -347,7 +475,7 @@ class ApiClient {
           }
         }
       } catch (e) {
-        print('Poll task status error: $e');
+        debugPrint('Poll task status error: $e');
       }
 
       // 等待后再次轮询

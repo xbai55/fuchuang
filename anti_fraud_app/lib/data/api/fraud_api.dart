@@ -19,9 +19,15 @@ class FraudApi {
     File? videoFile,
     ProgressCallback? onProgress,
   }) async {
+    await _client.ensureAuthenticated();
+
     // 构建表单数据
     final formData = FormData();
     formData.fields.add(MapEntry('message', message));
+    formData.fields.add(MapEntry(
+      'client_request_started_at_ms',
+      DateTime.now().millisecondsSinceEpoch.toString(),
+    ));
 
     // 添加文件（先压缩）
     if (imageFile != null) {
@@ -73,8 +79,14 @@ class FraudApi {
     File? videoFile,
     ProgressCallback? onProgress,
   }) async {
+    await _client.ensureAuthenticated();
+
     final formData = FormData();
     formData.fields.add(MapEntry('message', message));
+    formData.fields.add(MapEntry(
+      'client_request_started_at_ms',
+      DateTime.now().millisecondsSinceEpoch.toString(),
+    ));
 
     if (imageFile != null) {
       final compressed = await MediaCompressor.compress(imageFile);
@@ -121,13 +133,14 @@ class FraudApi {
 
   /// 获取历史记录
   Future<PaginatedHistory> getHistory({int page = 1, int size = 20}) async {
+    await _client.ensureAuthenticated();
+
     final response = await _client.get<Map<String, dynamic>>(
       ApiConstants.history,
       queryParameters: {'page': page, 'size': size},
     );
 
-    final data = response!['data'] as Map<String, dynamic>;
-    return PaginatedHistory.fromJson(data);
+    return PaginatedHistory.fromJson(response!);
   }
 }
 
@@ -152,16 +165,18 @@ class PaginatedHistory {
   });
 
   factory PaginatedHistory.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
     return PaginatedHistory(
-      items: (json['items'] as List)
-          .map((e) => DetectionHistory.fromJson(e as Map<String, dynamic>))
+      items: (rawItems is List ? rawItems : const [])
+          .whereType<Map<String, dynamic>>()
+          .map(DetectionHistory.fromJson)
           .toList(),
-      total: json['total'] as int,
-      page: json['page'] as int,
-      size: json['size'] as int,
-      pages: json['pages'] as int,
-      hasNext: json['has_next'] as bool,
-      hasPrev: json['has_prev'] as bool,
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      page: (json['page'] as num?)?.toInt() ?? 1,
+      size: (json['size'] as num?)?.toInt() ?? 20,
+      pages: (json['pages'] as num?)?.toInt() ?? 1,
+      hasNext: json['has_next'] as bool? ?? false,
+      hasPrev: json['has_prev'] as bool? ?? false,
     );
   }
 }
@@ -174,6 +189,7 @@ class DetectionHistory {
   final int riskScore;
   final String riskLevel;
   final String scamType;
+  final String chatMode;
   final bool guardianAlert;
   final DateTime createdAt;
 
@@ -184,20 +200,25 @@ class DetectionHistory {
     required this.riskScore,
     required this.riskLevel,
     required this.scamType,
+    required this.chatMode,
     required this.guardianAlert,
     required this.createdAt,
   });
 
   factory DetectionHistory.fromJson(Map<String, dynamic> json) {
+    final createdAtText = json['created_at'] as String?;
     return DetectionHistory(
-      id: json['id'] as int,
-      userMessage: json['user_message'] as String,
-      botResponse: json['bot_response'] as String,
-      riskScore: json['risk_score'] as int,
-      riskLevel: json['risk_level'] as String,
-      scamType: json['scam_type'] as String,
-      guardianAlert: json['guardian_alert'] as bool,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      userMessage: json['user_message'] as String? ?? '',
+      botResponse: json['bot_response'] as String? ?? '',
+      riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+      riskLevel: json['risk_level'] as String? ?? 'low',
+      scamType: json['scam_type'] as String? ?? '',
+      chatMode: json['chat_mode'] as String? ?? 'fraud',
+      guardianAlert: json['guardian_alert'] as bool? ?? false,
+      createdAt: createdAtText == null
+          ? DateTime.now()
+          : DateTime.tryParse(createdAtText) ?? DateTime.now(),
     );
   }
 }

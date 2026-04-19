@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,13 +49,13 @@ class MediaCompressor {
       // 打印压缩信息
       final originalSize = await file.length();
       final compressedSize = await resultFile.length();
-      print('图片压缩: ${(originalSize / 1024).toStringAsFixed(2)}KB -> '
+      debugPrint('图片压缩: ${(originalSize / 1024).toStringAsFixed(2)}KB -> '
           '${(compressedSize / 1024).toStringAsFixed(2)}KB '
           '(${(compressedSize / originalSize * 100).toStringAsFixed(1)}%)');
 
       return resultFile;
     } catch (e) {
-      print('图片压缩错误: $e');
+      debugPrint('图片压缩错误: $e');
       // 压缩失败返回原文件
       return file;
     }
@@ -73,7 +73,7 @@ class MediaCompressor {
       final info = await VideoCompress.compressVideo(
         file.path,
         quality: quality,
-        deleteOrigin: false,  // 不删除原文件
+        deleteOrigin: false, // 不删除原文件
       );
 
       if (info == null || info.file == null) {
@@ -83,14 +83,15 @@ class MediaCompressor {
       // 打印压缩信息
       final originalSize = await file.length();
       final compressedSize = await info.file!.length();
-      print('视频压缩: ${(originalSize / 1024 / 1024).toStringAsFixed(2)}MB -> '
+      debugPrint(
+          '视频压缩: ${(originalSize / 1024 / 1024).toStringAsFixed(2)}MB -> '
           '${(compressedSize / 1024 / 1024).toStringAsFixed(2)}MB '
           '(${(compressedSize / originalSize * 100).toStringAsFixed(1)}%)');
-      print('视频时长: ${info.duration}秒');
+      debugPrint('视频时长: ${info.duration}秒');
 
       return info.file!;
     } catch (e) {
-      print('视频压缩错误: $e');
+      debugPrint('视频压缩错误: $e');
       // 压缩失败返回原文件
       return file;
     }
@@ -124,9 +125,9 @@ class MediaCompressor {
         }
       }
 
-      print('临时文件清理完成');
+      debugPrint('临时文件清理完成');
     } catch (e) {
-      print('清理临时文件失败: $e');
+      debugPrint('清理临时文件失败: $e');
     }
   }
 

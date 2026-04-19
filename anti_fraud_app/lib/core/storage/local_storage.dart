@@ -61,6 +61,14 @@ class LocalStorage {
     return _prefs?.getString('user_role');
   }
 
+  Future<void> setMobileUsername(String username) async {
+    await _prefs?.setString('mobile_username', username);
+  }
+
+  String? getMobileUsername() {
+    return _prefs?.getString('mobile_username');
+  }
+
   // 清除所有数据
   Future<void> clearAll() async {
     await _prefs?.clear();

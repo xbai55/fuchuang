@@ -24,10 +24,11 @@ dependencies:
   shared_preferences: ^2.2.2
   sqflite: ^2.3.0
   path: ^1.8.3
+  path_provider: ^2.1.5
 
   # 图片处理
   image_picker: ^1.0.7
-  file_picker: ^6.1.1
+  file_picker: ^11.0.2
   flutter_image_compress: ^2.1.0
   video_compress: ^3.1.2
   cached_network_image: ^3.3.1
@@ -41,8 +42,8 @@ dependencies:
   # 工具
   intl: ^0.19.0
   permission_handler: ^11.2.0
-  device_info_plus: ^9.1.2
-  package_info_plus: ^5.0.1
+  device_info_plus: ^11.0.0
+  package_info_plus: ^9.0.1
 
   # JSON 序列化
   json_annotation: ^4.8.1

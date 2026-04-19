@@ -1,35 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'app_appearance.dart';
+
 /// 应用主题配置
-/// 采用深色主题，符合 Gemini 风格
 class AppTheme {
   AppTheme._();
 
-  // 主色调
-  static const Color primaryColor = Color(0xFF6366F1);      // 靛紫色
-  static const Color secondaryColor = Color(0xFF8B5CF6);    // 紫色
-  static const Color accentColor = Color(0xFF3B82F6);       // 蓝色
+  static const Color primaryColor = Color(0xFF2DD4BF);
+  static const Color secondaryColor = Color(0xFF34D399);
+  static const Color accentColor = Color(0xFFFBBF24);
 
-  // 背景色
-  static const Color backgroundColor = Color(0xFF0F0F1E);   // 深色背景
-  static const Color surfaceColor = Color(0xFF1A1A2E);      // 卡片背景
-  static const Color surfaceColorLight = Color(0xFF252542); // 浅色表面
+  static Color get backgroundColor => AppAppearance.instance.isLight
+      ? const Color(0xFF14302B)
+      : const Color(0xFF071210);
+  static Color get surfaceColor => AppAppearance.instance.isLight
+      ? const Color(0xFF1E3B35)
+      : const Color(0xFF10201D);
+  static Color get surfaceColorLight => AppAppearance.instance.isLight
+      ? const Color(0xFF295148)
+      : const Color(0xFF17322D);
+  static Color get outlineColor => AppAppearance.instance.isLight
+      ? const Color(0xFF4B7C72)
+      : const Color(0xFF284D45);
 
-  // 文字颜色
-  static const Color textPrimary = Colors.white;
-  static const Color textSecondary = Colors.white70;
-  static const Color textDisabled = Colors.white38;
+  static Color get textPrimary => Colors.white;
+  static Color get textSecondary => Colors.white70;
+  static Color get textDisabled => Colors.white38;
 
-  // 状态颜色
-  static const Color successColor = Color(0xFF44AA44);
-  static const Color warningColor = Color(0xFFFF8800);
-  static const Color errorColor = Color(0xFFFF4444);
-  static const Color infoColor = Color(0xFF3B82F6);
+  static const Color successColor = Color(0xFF22C55E);
+  static const Color warningColor = Color(0xFFF59E0B);
+  static const Color errorColor = Color(0xFFEF4444);
+  static const Color infoColor = Color(0xFF38BDF8);
 
-  // 渐变
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [primaryColor, secondaryColor],
+    colors: [secondaryColor, primaryColor],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -41,21 +46,20 @@ class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: backgroundColor,
       primaryColor: primaryColor,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: ColorScheme.dark(
         primary: primaryColor,
         secondary: secondaryColor,
+        tertiary: accentColor,
         surface: surfaceColor,
-        background: backgroundColor,
         error: errorColor,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: textPrimary,
-        onBackground: textPrimary,
       ),
       textTheme: GoogleFonts.notoSansTextTheme(
         ThemeData.dark().textTheme,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: backgroundColor,
         elevation: 0,
         centerTitle: true,
@@ -70,27 +74,29 @@ class AppTheme {
         color: surfaceColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
+          foregroundColor: const Color(0xFF04201C),
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
-          side: const BorderSide(color: textSecondary),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          side: BorderSide(color: outlineColor),
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
@@ -103,33 +109,34 @@ class AppTheme {
         filled: true,
         fillColor: surfaceColor,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: outlineColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: primaryColor, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: errorColor, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        hintStyle: const TextStyle(color: textDisabled),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: TextStyle(color: textDisabled),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: surfaceColor,
         selectedColor: primaryColor,
-        labelStyle: const TextStyle(color: textPrimary),
+        labelStyle: TextStyle(color: textPrimary),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surfaceColor,
         selectedItemColor: primaryColor,
         unselectedItemColor: textSecondary,
@@ -138,11 +145,28 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaceColorLight,
-        contentTextStyle: const TextStyle(color: textPrimary),
+        contentTextStyle: TextStyle(color: textPrimary),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  static ThemeData get lightTheme {
+    return darkTheme.copyWith(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: backgroundColor,
+      colorScheme: ColorScheme.light(
+        primary: primaryColor,
+        secondary: secondaryColor,
+        tertiary: accentColor,
+        surface: surfaceColor,
+        error: errorColor,
+        onPrimary: const Color(0xFF04201C),
+        onSecondary: const Color(0xFF04201C),
+        onSurface: textPrimary,
       ),
     );
   }

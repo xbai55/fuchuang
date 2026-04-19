@@ -1,11 +1,11 @@
 {
-    "name": "anti_fraud_app",
-    "short_name": "anti_fraud_app",
+    "name": "天枢明御",
+    "short_name": "天枢明御",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "天枢明御移动端反诈预警应用。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

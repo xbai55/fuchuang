@@ -18,12 +18,12 @@ class DetectionResult {
 
   factory DetectionResult.fromJson(Map<String, dynamic> json) {
     return DetectionResult(
-      riskScore: json['risk_score'] as int,
-      riskLevel: json['risk_level'] as String,
-      scamType: json['scam_type'] as String,
-      warningMessage: json['warning_message'] as String,
-      finalReport: json['final_report'] as String,
-      guardianAlert: json['guardian_alert'] as bool,
+      riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+      riskLevel: json['risk_level'] as String? ?? 'low',
+      scamType: json['scam_type'] as String? ?? '',
+      warningMessage: json['warning_message'] as String? ?? '',
+      finalReport: json['final_report'] as String? ?? '',
+      guardianAlert: json['guardian_alert'] as bool? ?? false,
     );
   }
 
