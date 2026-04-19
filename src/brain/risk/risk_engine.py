@@ -271,7 +271,6 @@ class RiskEngine:
         """
         # Build context from state
         total_started_at = perf_counter()
-        prompt_started_at = perf_counter()
         context = self._build_assessment_context(
             state,
             rag_assessment,
@@ -281,12 +280,6 @@ class RiskEngine:
         # Build user prompt
         user_prompt = self.user_template.format(**context)
         timing = dict((state.workflow_metadata or {}).get("performance_timing") or {})
-        timing.update(
-            {
-                "risk_llm_prompt_prepare_ms": round((perf_counter() - prompt_started_at) * 1000, 2),
-                "risk_llm_prompt_chars": len(self.system_prompt) + len(user_prompt),
-            }
-        )
         state.workflow_metadata["performance_timing"] = timing
 
         try:
@@ -301,8 +294,6 @@ class RiskEngine:
                 {
                     "risk_llm_api_roundtrip_ms": round((perf_counter() - llm_started_at) * 1000, 2),
                     "risk_llm_total_ms": round((perf_counter() - total_started_at) * 1000, 2),
-                    "risk_llm_model": response.model,
-                    "risk_llm_output_chars": len(response.content or ""),
                 }
             )
             state.workflow_metadata["performance_timing"] = timing
