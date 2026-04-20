@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
-import { LockOutlined, MailOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons';
+import { LockOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
 import { authAPI } from '../services/api';
-import { storage } from '../utils/storage';
 import { useI18n } from '../i18n';
+import { storage } from '../utils/storage';
+import { APP_NAME, APP_NAME_EN, APP_TAGLINE, APP_TAGLINE_EN, BRAND_LOGO_SRC } from '../utils/brand';
 import type { RegisterRequest } from '../types';
 
 const { Paragraph, Text, Title } = Typography;
@@ -29,6 +30,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   const t = (zh: string, en: string) => (isZh ? zh : en);
+  const brandName = t(APP_NAME, APP_NAME_EN);
+  const brandTagline = t(APP_TAGLINE, APP_TAGLINE_EN);
 
   const onFinish = async (values: RegisterFormValues) => {
     if (values.password !== values.confirmPassword) {
@@ -51,7 +54,9 @@ export default function Register() {
     } catch (error) {
       const apiError = error as ApiError;
       const errorMsg =
-        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('注册失败', 'Registration failed');
+        apiError.response?.data?.detail ??
+        apiError.response?.data?.message ??
+        t('注册失败', 'Registration failed');
       message.error(errorMsg);
     } finally {
       setLoading(false);
@@ -59,34 +64,47 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex bg-darker">
-      <div className="hidden lg:flex flex-1 flex-col justify-center items-center p-12 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-20 h-72 w-72 rounded-full bg-primary blur-3xl" />
-          <div className="absolute bottom-24 right-16 h-80 w-80 rounded-full bg-secondary blur-3xl" />
-        </div>
-
-        <div className="relative z-10 max-w-lg text-center">
-          <SafetyOutlined className="text-7xl text-secondary" />
-          <Title level={1} className="!mt-8 !mb-4 !text-white">
-            {t('创建账号', 'Create Account')}
+    <div className="auth-shell flex">
+      <div className="auth-brand-panel hidden flex-1 flex-col justify-center px-16 py-12 lg:flex">
+        <div className="max-w-xl">
+          <div className="brand-logo h-20 w-20 rounded-lg">
+            <img src={BRAND_LOGO_SRC} alt={brandName} />
+          </div>
+          <div className="page-kicker mt-10">Tianshu Mingyu</div>
+          <Title level={1} className="!mb-5 !mt-3 !text-6xl !font-semibold !leading-tight !text-white">
+            {brandName}
           </Title>
-          <Paragraph className="!text-lg !text-gray-300">
-            {t('一分钟内完成反诈工作台初始化。', 'Set up your anti-fraud workspace in one minute.')}
+          <Paragraph className="!max-w-md !text-lg !leading-8 !text-gray-300">
+            {brandTagline}
           </Paragraph>
+          <div className="auth-feature-list mt-12 max-w-md text-left">
+            <div className="auth-feature-item py-4">
+              {t('账户级风险记录', 'Account-level risk history')}
+            </div>
+            <div className="auth-feature-item py-4">
+              {t('重点联系人协同', 'Key contact coordination')}
+            </div>
+            <div className="auth-feature-item py-4">
+              {t('隐私模式与主题设置', 'Privacy mode and theme settings')}
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="flex flex-1 items-center justify-center p-6">
-        <Card className="w-full max-w-md card-dark !border-gray-700" variant="borderless">
+        <Card className="auth-card w-full max-w-md" variant="borderless">
           <div className="mb-8 text-center">
             <div className="mb-4 lg:hidden">
-              <SafetyOutlined className="text-5xl text-secondary" />
+              <div className="brand-logo mx-auto h-14 w-14 rounded-lg">
+                <img src={BRAND_LOGO_SRC} alt={brandName} />
+              </div>
             </div>
             <Title level={2} className="!mb-2 !text-white">
               {t('注册', 'Register')}
             </Title>
-            <Text className="!text-gray-400">{t('创建新账号后即可开始使用。', 'Create a new account to get started.')}</Text>
+            <Text className="!text-gray-400">
+              {t('创建天枢明御账号后即可开始使用。', 'Create a Tianshu Mingyu account to get started.')}
+            </Text>
           </div>
 
           <Form<RegisterFormValues> layout="vertical" size="large" onFinish={onFinish} autoComplete="off">
@@ -108,7 +126,7 @@ export default function Register() {
               name="email"
               rules={[
                 { required: true, message: t('请输入邮箱', 'Please enter your email') },
-                { type: 'email', message: t('请输入有效的邮箱地址', 'Please enter a valid email') },
+                { type: 'email', message: t('请输入有效的邮箱地址', 'Please enter a valid email address') },
               ]}
             >
               <Input
@@ -166,7 +184,7 @@ export default function Register() {
             </Form.Item>
 
             <div className="text-center text-sm text-gray-400">
-              {t('已有账号？', 'Already have an account?')}
+              {t('已经有账号？', 'Already have an account?')}
               <Link to="/login" className="ml-1 text-secondary hover:text-primary">
                 {t('去登录', 'Sign In')}
               </Link>

@@ -18,6 +18,10 @@ from fastapi.responses import JSONResponse
 
 from auth import get_current_user
 from database import User
+from src.brain.rag.external_case_sync import (
+    get_external_case_sync_status,
+    sync_external_case_sources,
+)
 
 router = APIRouter()
 
@@ -233,3 +237,52 @@ async def get_knowledge_stats(
         "chunk_overlap": config.index.chunk_overlap,
         "index_dir": str(config.paths.index_dir),
     }
+
+
+@router.post("/sync/external/once", summary="触发一次外部诈骗案例自动采集并增量入库")
+async def sync_external_cases_once(
+    body: dict | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    手动触发一次外部案例同步流程。
+
+    Request body:
+        source_names (list[str], optional): 仅同步指定来源
+        dry_run (bool, optional): 仅采集+清洗+去重，不写入向量库
+    """
+    payload = body or {}
+    requested_sources = payload.get("source_names") or payload.get("sources")
+    if requested_sources is not None and not isinstance(requested_sources, list):
+        raise HTTPException(status_code=422, detail="source_names 必须是字符串数组")
+
+    dry_run = bool(payload.get("dry_run", False))
+    result = await sync_external_case_sources(
+        source_names=requested_sources,
+        dry_run=dry_run,
+    )
+
+    if result.get("status") == "config_not_found":
+        raise HTTPException(status_code=404, detail="外部采集配置文件不存在")
+
+    if result.get("status") == "disabled":
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=result,
+        )
+
+    if result.get("status") == "no_sources":
+        raise HTTPException(status_code=422, detail="外部采集配置中未定义 sources")
+
+    return result
+
+
+@router.get("/sync/external/status", summary="查看外部诈骗案例自动同步状态")
+async def get_external_sync_status(
+    current_user: User = Depends(get_current_user),
+):
+    """返回自动同步开关、周期、数据源与最近执行状态。"""
+    status_payload = get_external_case_sync_status()
+    if status_payload.get("status") == "config_not_found":
+        raise HTTPException(status_code=404, detail="外部采集配置文件不存在")
+    return status_payload

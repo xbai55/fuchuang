@@ -144,6 +144,88 @@ def load_manual_photo_types(path: Path) -> list[KnowledgeDocument]:
     return docs
 
 
+def load_local_case_directory(directory: Path) -> list[KnowledgeDocument]:
+    if not directory.exists() or not directory.is_dir():
+        return []
+
+    documents: list[KnowledgeDocument] = []
+    for path in sorted(directory.glob("*.json")):
+        documents.extend(load_local_case_file(path))
+    return documents
+
+
+def load_local_case_file(path: Path) -> list[KnowledgeDocument]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"[RAG] skip local case file {path}: {exc}")
+        return []
+
+    if not isinstance(payload, dict):
+        return []
+
+    source_name = clean_text(str(payload.get("website_name") or path.stem))
+    source_url = clean_text(str(payload.get("source_url") or ""))
+    rows = payload.get("source_data")
+    if not isinstance(rows, list):
+        return []
+
+    documents: list[KnowledgeDocument] = []
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            continue
+
+        title = clean_text(strip_html(str(row.get("title") or row.get("name") or "")))
+        content = clean_text(strip_html(str(row.get("content") or row.get("body") or row.get("text") or "")))
+        if not title or not content:
+            continue
+
+        record_url = clean_text(str(row.get("url") or row.get("link") or row.get("source_url") or ""))
+        display_url = record_url or source_url or _build_local_case_canonical_url(path, title, content, index)
+        canonical_url = _build_local_case_canonical_url(path, title, content, index)
+        source_site = _source_site_from_url(record_url or source_url)
+        tags = _merge_tags(["网络爬取案例"], _infer_tags(title, content))
+
+        documents.append(
+            _make_document(
+                url=display_url,
+                canonical_url=canonical_url,
+                source_site=source_site,
+                source_name=source_name,
+                category="case",
+                title=title,
+                content=content,
+                published_at=None,
+                subtype=_infer_subtype(title, "case"),
+                tags=tags,
+                images=[],
+                metadata={
+                    "source_file": path.name,
+                    "source_directory": path.parent.name,
+                    "record_index": index,
+                    "source_origin_url": source_url,
+                    "website_name": source_name,
+                },
+            )
+        )
+
+    return documents
+
+
+def _build_local_case_canonical_url(path: Path, title: str, content: str, index: int) -> str:
+    fingerprint = sha1_text(path.as_posix(), str(index), title, content)
+    directory_name = quote(path.parent.name or "local-cases", safe="")
+    file_name = quote(path.stem or path.name, safe="")
+    return f"local-case://{directory_name}/{file_name}/{fingerprint}"
+
+
+def _source_site_from_url(url: str) -> str:
+    split = urlsplit(url.strip()) if url else None
+    if split and split.netloc:
+        return split.netloc.lower()
+    return "local_case_directory"
+
+
 def collect_documents(config: RAGConfig) -> list[KnowledgeDocument]:
     documents: list[KnowledgeDocument] = []
 
@@ -198,6 +280,9 @@ def collect_documents(config: RAGConfig) -> list[KnowledgeDocument]:
                         ),
                     )
                 )
+
+    for directory in config.sources.local_case_directories:
+        documents.extend(load_local_case_directory(directory))
 
     documents.extend(load_manual_photo_types(config.photo_types_seed_file))
     return deduplicate_documents(documents)
@@ -502,6 +587,7 @@ def _extract_gov_image_documents(
 def _make_document(
     *,
     url: str,
+    canonical_url: str | None = None,
     source_site: str,
     source_name: str | None,
     category: str,
@@ -514,7 +600,7 @@ def _make_document(
     metadata: dict[str, Any],
 ) -> KnowledgeDocument:
     content = clean_text(content)
-    canonical_url = canonicalize_url(url)
+    canonical_url = canonicalize_url(canonical_url or url)
     doc_id = sha1_text(canonical_url, category, title)
     return KnowledgeDocument(
         doc_id=doc_id,

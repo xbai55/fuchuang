@@ -65,11 +65,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
     { value: 'finance_practitioner', label: t('金融从业者', 'Finance Practitioner') },
     { value: 'other', label: t('其他职业', 'Other Occupation') },
   ];
+
   const ageGroupOptions = [
     { value: 'child', label: t('儿童', 'Child') },
-    { value: 'young_adult', label: t('青壮年', 'Young Adult') },
-    { value: 'elderly', label: t('老人', 'Elderly') },
+    { value: 'young_adult', label: t('青年', 'Young Adult') },
+    { value: 'elderly', label: t('老年', 'Elderly') },
   ];
+
   const genderOptions = [
     { value: 'male', label: t('男', 'Male') },
     { value: 'female', label: t('女', 'Female') },
@@ -97,7 +99,6 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
         age_group: settings.age_group,
         gender: settings.gender,
         occupation: settings.occupation,
-        guardian_name: settings.guardian_name,
       });
     } catch (error) {
       message.error(getErrorMessage(error, t('加载设置失败', 'Failed to load settings')));
@@ -137,9 +138,9 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
       const updatedUser = await settingsAPI.updateProfile(values);
       updateLocalUser(updatedUser);
       notifyUserSettingsChanged();
-      message.success(t('个人资料已更新', 'Profile updated'));
+      message.success(t('资料已更新', 'Profile updated'));
     } catch (error) {
-      message.error(getErrorMessage(error, t('更新个人资料失败', 'Failed to update profile')));
+      message.error(getErrorMessage(error, t('更新资料失败', 'Failed to update profile')));
     } finally {
       setLoading(false);
     }
@@ -158,9 +159,9 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
         new_password: values.new_password,
       });
       passwordForm.resetFields();
-      message.success(t('密码已修改', 'Password updated'));
+      message.success(t('密码已更新', 'Password updated'));
     } catch (error) {
-      message.error(getErrorMessage(error, t('修改密码失败', 'Failed to update password')));
+      message.error(getErrorMessage(error, t('更新密码失败', 'Failed to update password')));
     } finally {
       setLoading(false);
     }
@@ -181,51 +182,56 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
 
   const handleDeleteAccount = () => {
     Modal.confirm({
-      title: t('确认注销账号？', 'Delete account?'),
+      title: t('确认删除账号？', 'Delete account?'),
       content: (
         <div>
           <p className="mb-3">
             {t(
-              '该操作会在后端停用当前账号，确认后本地数据也会被清除。',
+              '该操作会在后端停用账号，并清除本地缓存数据。',
               'This action disables your account on the backend and clears local data.',
             )}
           </p>
           <Alert
             type="warning"
             showIcon
-            message={t('此操作不可轻易撤销', 'This action is hard to undo')}
-            description={t('你将失去与该账号关联的个人设置、联系人数据和聊天历史。', 'You will lose profile settings, contacts, and chat history tied to this account.')}
+            message={t('该操作较难撤销', 'This action is hard to undo')}
+            description={t(
+              '你将失去与该账号绑定的资料、联系人和聊天记录。',
+              'You will lose profile settings, contacts, and chat history tied to this account.',
+            )}
           />
         </div>
       ),
-      okText: t('注销账号', 'Delete Account'),
+      okText: t('删除账号', 'Delete Account'),
       okType: 'danger',
       cancelText: t('取消', 'Cancel'),
       onOk: async () => {
         try {
           await settingsAPI.deleteAccount();
           storage.clear();
-          message.success(t('账号已注销', 'Account deleted'));
+          message.success(t('账号已删除', 'Account deleted'));
           navigate('/login');
         } catch (error) {
-          message.error(getErrorMessage(error, t('注销账号失败', 'Failed to delete account')));
+          message.error(getErrorMessage(error, t('删除账号失败', 'Failed to delete account')));
         }
       },
     });
   };
 
   return (
-    <div className="min-h-screen bg-darker p-6">
+    <div className="agent-shell min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center gap-4">
           <Button icon={<ArrowLeftOutlined />} onClick={onBack} className="btn-secondary">
             {t('返回', 'Back')}
           </Button>
           <div>
-            <Title level={3} className="!mb-0 !text-white">
+            <Title level={3} className="settings-title !mb-0">
               {t('设置', 'Settings')}
             </Title>
-            <Text className="text-gray-400">{t('管理账号信息、个性偏好和安全控制。', 'Manage account, preferences, and security controls.')}</Text>
+            <Text className="text-gray-400">
+              {t('管理账号信息、个性偏好和安全控制。', 'Manage account, preferences, and security controls.')}
+            </Text>
           </div>
         </div>
 
@@ -235,9 +241,15 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
               <Title level={4} className="!text-white">
                 {t('个人资料', 'Profile')}
               </Title>
+              <Text className="mb-5 block text-sm text-gray-400">
+                {t(
+                  '年龄、性别和职业会参与风险个性化评估，用于调整预警阈值和提示语气。',
+                  'Age, gender, and occupation participate in risk personalization for thresholds and prompt tone.',
+                )}
+              </Text>
               <Form<UserProfileUpdate> form={profileForm} layout="vertical" onFinish={(values) => void handleSaveProfile(values)}>
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={t('用户名', 'Username')}
                       name="username"
@@ -249,13 +261,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                       <Input prefix={<UserOutlined />} className="input-dark" />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={t('邮箱', 'Email')}
                       name="email"
                       rules={[
                         { required: true, message: t('请输入邮箱', 'Please enter email') },
-                        { type: 'email', message: t('请输入有效的邮箱地址', 'Please enter a valid email') },
+                        { type: 'email', message: t('请输入有效的邮箱地址', 'Please enter a valid email address') },
                       ]}
                     >
                       <Input className="input-dark" />
@@ -264,16 +276,16 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                 </Row>
 
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
-                      label={t('年龄', 'Age Group')}
+                      label={t('年龄段', 'Age Group')}
                       name="age_group"
-                      rules={[{ required: true, message: t('请选择年龄', 'Please select age group') }]}
+                      rules={[{ required: true, message: t('请选择年龄段', 'Please select age group') }]}
                     >
                       <Select className="select-dark" options={ageGroupOptions} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={t('性别', 'Gender')}
                       name="gender"
@@ -285,22 +297,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                 </Row>
 
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={t('职业', 'Occupation')}
                       name="occupation"
                       rules={[{ required: true, message: t('请选择职业', 'Please select occupation') }]}
                     >
                       <Select className="select-dark" options={occupationOptions} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item
-                      label={t('监护人姓名', 'Guardian Name')}
-                      name="guardian_name"
-                      rules={[{ required: true, message: t('请输入监护人姓名', 'Please enter guardian name') }]}
-                    >
-                      <Input className="input-dark" />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -313,7 +316,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
               </Form>
             </Card>
 
-            <Card className="card-dark !border-gray-700 !mt-6" variant="borderless">
+            <Card className="card-dark !mt-6 !border-gray-700" variant="borderless">
               <Title level={4} className="!text-white">
                 {t('安全', 'Security')}
               </Title>
@@ -342,7 +345,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                 <Form.Item
                   label={t('确认新密码', 'Confirm New Password')}
                   name="confirm_password"
-                  rules={[{ required: true, message: t('请再次输入新密码', 'Please confirm new password') }]}
+                  rules={[{ required: true, message: t('请确认新密码', 'Please confirm new password') }]}
                 >
                   <Input.Password prefix={<LockOutlined />} className="input-dark" />
                 </Form.Item>
@@ -360,7 +363,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                   {t('退出登录', 'Log Out')}
                 </Button>
                 <Button danger icon={<DeleteOutlined />} onClick={handleDeleteAccount}>
-                  {t('注销账号', 'Delete Account')}
+                  {t('删除账号', 'Delete Account')}
                 </Button>
               </Space>
             </Card>
@@ -417,7 +420,9 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <Text className="block text-white">{t('隐私模式', 'Privacy Mode')}</Text>
-                    <Text className="text-sm text-gray-400">{t('尽可能在界面中隐藏敏感信息。', 'Hide sensitive information on the interface when possible.')}</Text>
+                    <Text className="text-sm text-gray-400">
+                      {t('尽可能在界面中隐藏敏感信息。', 'Hide sensitive information on the interface when possible.')}
+                    </Text>
                   </div>
                   <Switch
                     checked={user?.privacy_mode ?? false}
@@ -427,7 +432,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
               </div>
             </Card>
 
-            <Card className="card-dark !border-gray-700 !mt-6" variant="borderless">
+            <Card className="card-dark !mt-6 !border-gray-700" variant="borderless">
               <Title level={4} className="!text-white">
                 {t('通知', 'Notifications')}
               </Title>
@@ -435,36 +440,55 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <Text className="block text-white">{t('启用通知', 'Enable Notifications')}</Text>
-                    <Text className="text-sm text-gray-400">{t('通知推送的总开关。', 'Master switch for notification delivery.')}</Text>
+                    <Text className="text-sm text-gray-400">
+                      {t('通知推送的总开关。', 'Master switch for notification delivery.')}
+                    </Text>
                   </div>
                   <Switch
                     checked={user?.notify_enabled ?? true}
-                    onChange={(checked) => void updateSettings({ notify_enabled: checked }, t('通知设置已更新', 'Notification settings updated'))}
+                    onChange={(checked) =>
+                      void updateSettings({ notify_enabled: checked }, t('通知设置已更新', 'Notification settings updated'))
+                    }
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div>
                     <Text className="block text-white">{t('高风险提醒', 'High-risk Alerts')}</Text>
-                    <Text className="text-sm text-gray-400">{t('检测结果为高风险时发送额外提醒。', 'Send extra alerts when risk level is high.')}</Text>
+                    <Text className="text-sm text-gray-400">
+                      {t('检测结果为高风险时发送额外提醒。', 'Send extra alerts when risk level is high.')}
+                    </Text>
                   </div>
                   <Switch
                     checked={user?.notify_high_risk ?? true}
                     disabled={!user?.notify_enabled}
-                    onChange={(checked) => void updateSettings({ notify_high_risk: checked }, t('高风险提醒已更新', 'High-risk alert setting updated'))}
+                    onChange={(checked) =>
+                      void updateSettings(
+                        { notify_high_risk: checked },
+                        t('高风险提醒设置已更新', 'High-risk alert setting updated'),
+                      )
+                    }
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Text className="block text-white">{t('监护提醒', 'Guardian Alerts')}</Text>
-                    <Text className="text-sm text-gray-400">{t('需要升级处理时通知监护流程。', 'Notify guardian workflow when escalation is needed.')}</Text>
+                    <Text className="block text-white">{t('可信联系人联动', 'Trusted Contact Alerts')}</Text>
+                    <Text className="text-sm text-gray-400">
+                      {t(
+                        '需要升级处理时通知重点联系人流程。',
+                        'Notify the key-contact workflow when escalation is needed.',
+                      )}
+                    </Text>
                   </div>
                   <Switch
                     checked={user?.notify_guardian_alert ?? true}
                     disabled={!user?.notify_enabled}
                     onChange={(checked) =>
-                      void updateSettings({ notify_guardian_alert: checked }, t('监护提醒已更新', 'Guardian alert setting updated'))
+                      void updateSettings(
+                        { notify_guardian_alert: checked },
+                        t('可信联系人联动提醒已更新', 'Trusted contact alert setting updated'),
+                      )
                     }
                   />
                 </div>

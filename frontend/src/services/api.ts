@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import type {
   AuthResponse,
   User,
@@ -19,6 +19,7 @@ import type {
   UserProfileUpdate,
   ChangePasswordRequest
 } from '../types';
+import { storage } from '../utils/storage';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const WS_BASE_URL = API_BASE_URL.replace(/\/$/, '').replace(/^http/i, 'ws');
@@ -34,7 +35,7 @@ const api = axios.create({
 // 请求拦截器：添加 token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = storage.getValidToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -51,8 +52,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Token 过期，清除本地存储并跳转到登录页
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
+      storage.clear();
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -88,8 +88,8 @@ export const authAPI = {
   },
 
   // 更新用户信息
-  updateUser: async (user_role?: string, guardian_name?: string): Promise<User> => {
-    const response = await api.put<{ code: number; message: string; data: User }>('/api/auth/me', { user_role, guardian_name });
+  updateUser: async (user_role?: string): Promise<User> => {
+    const response = await api.put<{ code: number; message: string; data: User }>('/api/auth/me', { user_role });
     return response.data.data;
   },
 };
@@ -157,6 +157,7 @@ export const fraudAPI = {
   detect: async (data: FraudDetectionRequest): Promise<FraudDetectionResponse> => {
     const formData = new FormData();
     formData.append('message', data.message);
+    formData.append('language', data.language || 'zh-CN');
     formData.append('client_request_started_at_ms', String(data.client_request_started_at_ms ?? Date.now()));
 
     if (data.audio_file) {
@@ -181,6 +182,7 @@ export const fraudAPI = {
   detectAsync: async (data: FraudDetectionRequest): Promise<FraudAsyncResponse> => {
     const formData = new FormData();
     formData.append('message', data.message);
+    formData.append('language', data.language || 'zh-CN');
     formData.append('client_request_started_at_ms', String(data.client_request_started_at_ms ?? Date.now()));
 
     if (data.audio_file) {
@@ -209,7 +211,7 @@ export const fraudAPI = {
 
   // 创建任务实时推送连接
   createTaskSocket: (taskId: string): WebSocket => {
-    const token = localStorage.getItem('access_token') || '';
+    const token = storage.getValidToken() || '';
     const wsUrl = `${WS_BASE_URL}/api/fraud/ws/tasks/${taskId}?token=${encodeURIComponent(token)}`;
     return new WebSocket(wsUrl);
   },
@@ -253,7 +255,7 @@ export const agentAPI = {
 
   // 创建 Agent 任务实时推送连接
   createTaskSocket: (taskId: string): WebSocket => {
-    const token = localStorage.getItem('access_token') || '';
+    const token = storage.getValidToken() || '';
     const wsUrl = `${WS_BASE_URL}/api/agent/ws/tasks/${taskId}?token=${encodeURIComponent(token)}`;
     return new WebSocket(wsUrl);
   },

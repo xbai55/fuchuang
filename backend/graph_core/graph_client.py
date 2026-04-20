@@ -65,6 +65,7 @@ class GraphClient:
             EmergencyContact(
                 name=item.get("name", ""),
                 phone=item.get("phone", ""),
+                email=item.get("email", ""),
                 relationship=item.get("relationship", ""),
                 is_guardian=bool(item.get("is_guardian", False)),
             )

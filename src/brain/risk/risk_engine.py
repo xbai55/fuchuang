@@ -14,7 +14,12 @@ from src.core.models import (
     RetrievedCase,
 )
 from src.core.interfaces import LLMClient
-from src.core.utils import format_role_profile_text, load_node_config, normalize_user_role
+from src.core.utils import (
+    build_role_prompt_guidance,
+    format_role_profile_text,
+    load_node_config,
+    normalize_user_role,
+)
 from src.core.utils.risk_personalization import build_personalized_thresholds, risk_level_from_score
 
 
@@ -77,6 +82,9 @@ class RiskEngine:
 - 用户类型: {user_role}
 - 组合画像:
 {combined_profile}
+
+## 角色化提示词
+{role_prompt_guidance}
 
 ## 短期记忆
 {short_term_memory_summary}
@@ -271,10 +279,12 @@ class RiskEngine:
         """
         # Build context from state
         total_started_at = perf_counter()
+        language = self._get_language(state)
         context = self._build_assessment_context(
             state,
             rag_assessment,
             dynamic_thresholds=dynamic_thresholds,
+            language=language,
         )
 
         # Build user prompt
@@ -333,6 +343,7 @@ class RiskEngine:
         state: GlobalState,
         rag_assessment: Optional[RiskAssessment] = None,
         dynamic_thresholds: Optional[Dict[str, Any]] = None,
+        language: str = "zh-CN",
     ) -> Dict[str, Any]:
         """
         Build context dict for prompt formatting.
@@ -380,12 +391,18 @@ class RiskEngine:
             "user_role": user_role,
             "role_profile": format_role_profile_text(user_role),
             "combined_profile": combined_profile,
+            "role_prompt_guidance": build_role_prompt_guidance(user_role, language),
             "short_term_memory_summary": short_term_summary,
             "long_term_memory_summary": long_term_summary,
             "dynamic_low_threshold": int(threshold_meta.get("low_threshold", self.LOW_THRESHOLD)),
             "dynamic_high_threshold": int(threshold_meta.get("high_threshold", self.HIGH_THRESHOLD)),
             "threshold_adjustment_reasons": threshold_reason_text,
         }
+
+    def _get_language(self, state: GlobalState) -> str:
+        metadata = dict(state.workflow_metadata or {})
+        language = str(metadata.get("language") or metadata.get("ui_language") or "zh-CN").strip().lower()
+        return "en-US" if language.startswith("en") else "zh-CN"
 
     def _format_rag_analysis(self, assessment: Optional[RiskAssessment]) -> str:
         """

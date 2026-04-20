@@ -89,6 +89,7 @@ class KnowledgeSearchService:
         """
         configured_backend = "hybrid"
         chroma_persist_directory = "./data/vector_store"
+        dense_model = "chroma-default-onnx"
 
         # 自动发现配置并按需构建知识库
         if not tfidf_index_path:
@@ -99,6 +100,7 @@ class KnowledgeSearchService:
                     config = load_rag_config(config_path)
 
                     configured_backend = config.index.backend
+                    dense_model = config.index.dense_model
                     tfidf_index_path = str(config.paths.index_dir)
                     chroma_persist_directory = str(config.paths.index_dir / "chromadb")
 
@@ -124,6 +126,7 @@ class KnowledgeSearchService:
                 vector_store = ChromaVectorStore(
                     collection_name="fraud_cases",
                     persist_directory=chroma_persist_directory,
+                    embedding_model=dense_model,
                 )
 
         # 判断是否使用混合模式
@@ -142,6 +145,7 @@ class KnowledgeSearchService:
             vector_store = ChromaVectorStore(
                 collection_name="fraud_cases",
                 persist_directory=chroma_persist_directory,
+                embedding_model=dense_model,
             )
 
         return FraudCaseRetriever(

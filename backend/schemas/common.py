@@ -44,6 +44,7 @@ class Token(BaseModel):
 class ContactBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     phone: str = Field(..., min_length=11, max_length=20)
+    email: str = Field("", max_length=100)
     relationship: str = "亲友"
     is_guardian: bool = False
 
@@ -53,6 +54,7 @@ class ContactCreate(ContactBase):
 class ContactUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
     relationship: Optional[str] = None
     is_guardian: Optional[bool] = None
 
@@ -66,6 +68,7 @@ class ContactResponse(ContactBase):
 # ========== 反诈预警相关 ==========
 class FraudDetectionRequest(BaseModel):
     message: str
+    language: str = "zh-CN"
     audio_url: Optional[str] = None
     image_url: Optional[str] = None
     video_url: Optional[str] = None

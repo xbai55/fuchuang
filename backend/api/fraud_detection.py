@@ -2,10 +2,12 @@ from pathlib import Path
 from time import perf_counter, time
 from typing import Any, Optional
 import asyncio
+from functools import lru_cache
 import json
 import os
 import re
 import tempfile
+import unicodedata
 import uuid
 
 import httpx
@@ -19,6 +21,29 @@ from database import ChatHistory, Contact, SessionLocal, User, get_db
 from email_notifier import attach_email_notification, send_high_risk_email_if_needed
 from graph_core.graph_client import graph_client
 from graph_core.task_manager import TaskStatus, task_manager
+try:
+    from language_prompts import (
+        build_single_pass_system_prompt,
+        localize_early_warning,
+        normalize_output_language,
+    )
+except ImportError:
+    from backend.language_prompts import (
+        build_single_pass_system_prompt,
+        localize_early_warning,
+        normalize_output_language,
+    )
+try:
+    from risk_guardrails import (
+        apply_critical_warning_floor,
+        build_critical_text_guardrail_warning,
+    )
+except ImportError:
+    from backend.risk_guardrails import (
+        apply_critical_warning_floor,
+        build_critical_text_guardrail_warning,
+    )
+from notification_recipients import resolve_guardian_email_receiver
 from schemas import FeedbackRequest
 from schemas.response import ResponseCode, error_response, paginate_response, success_response
 from src.brain.rag.auto_build import get_rag_config_path
@@ -29,6 +54,7 @@ from src.brain.rag.models import create_search_hit_from_retrieved_case
 from src.brain.rag.retriever import FraudCaseRetriever
 from src.core.utils.config_loader import load_node_config
 from src.core.utils.risk_personalization import (
+    build_role_prompt_guidance,
     build_personalized_thresholds,
     format_combined_profile_text,
     normalize_user_role,
@@ -112,6 +138,14 @@ _TEXT_PATTERN_RULES = (
     (re.compile(r"(安全账户|资金清查|洗钱|配合调查|案件保密)"), 26, "出现公检法常见施压话术"),
     (re.compile(r"(屏幕共享|远程控制|远程协助|会议软件|共享屏幕)"), 24, "对方引导远程控制"),
     (re.compile(r"(点击链接|下载app|安装软件|扫码|二维码).{0,10}(退款|解冻|核验|领取)"), 22, "出现诱导链接或安装话术"),
+    (re.compile(r"(刷单|返利|做任务).{0,10}(垫付|先付|充值|返现|佣金)"), 24, "出现刷单返利诱导垫付话术"),
+    (re.compile(r"(客服|平台|商家).{0,12}(退款|退费|理赔|改签).{0,12}(验证码|链接|下载|屏幕共享|远程)"), 24, "出现冒充客服退款链路"),
+    (re.compile(r"(注销|清空|修复).{0,12}(征信|校园贷|学生账户|贷款记录)"), 22, "出现征信修复/注销类恐吓话术"),
+    (re.compile(r"(贷款|放款|征信).{0,14}(保证金|解冻费|工本费|刷流水|手续费)"), 22, "出现贷款前置收费或刷流水话术"),
+    (re.compile(r"(带单|老师|分析师|内幕消息).{0,12}(稳赚|保本|高收益|翻倍|拉群)"), 20, "出现投资带单高收益诱导"),
+    (re.compile(r"(裸聊|私密视频).{0,14}(敲诈|转账|删(除)?视频|封口费)"), 28, "出现裸聊敲诈勒索话术"),
+    (re.compile(r"(领导|老板|总监).{0,10}(转账|打款|汇款).{0,8}(紧急|马上|立刻)"), 22, "出现冒充领导紧急转账指令"),
+    (re.compile(r"(游戏交易|游戏账号|装备|皮肤).{0,12}(私下交易|先付款|保证金)"), 18, "出现游戏交易私下付款诱导"),
 )
 
 _TEXT_KEYWORD_WEIGHTS = {
@@ -126,13 +160,118 @@ _TEXT_KEYWORD_WEIGHTS = {
     "征信": 10,
     "兼职刷单": 18,
     "先垫付": 14,
+    "刷单返利": 20,
+    "垫付资金": 16,
+    "保证金": 14,
+    "解冻费": 14,
+    "工本费": 10,
+    "包装流水": 16,
+    "注销校园贷": 16,
+    "征信修复": 14,
+    "冒充客服": 14,
+    "退款理赔": 12,
+    "机票改签": 12,
+    "会员退费": 12,
     "高收益": 14,
     "内部消息": 12,
+    "带单老师": 14,
+    "杀猪盘": 20,
+    "网恋投资": 16,
+    "裸聊敲诈": 24,
+    "冒充领导": 14,
+    "领导转账": 16,
+    "游戏交易": 12,
+    "私下交易": 12,
     "verification code": 18,
     "wire transfer": 18,
     "safe account": 16,
     "screen share": 16,
 }
+
+_TEXT_CONSULTATIVE_CONTEXT_KEYWORDS = (
+    "反诈",
+    "防诈",
+    "防骗",
+    "科普",
+    "普法",
+    "宣传",
+    "案例分析",
+    "新闻",
+    "报道",
+    "课程",
+    "作业",
+    "论文",
+    "讲座",
+    "提醒",
+    "这是诈骗吗",
+    "是不是诈骗",
+    "是否诈骗",
+    "帮我判断",
+)
+
+_TEXT_TRANSACTION_KEYWORDS = (
+    "转账",
+    "汇款",
+    "打款",
+    "付款",
+    "先付款",
+    "先交钱",
+    "充值",
+    "垫付",
+    "保证金",
+    "解冻费",
+    "工本费",
+    "手续费",
+    "刷流水",
+    "验证码",
+    "动态码",
+    "安全账户",
+    "屏幕共享",
+    "远程控制",
+    "远程协助",
+    "点击链接",
+    "下载app",
+    "下载APP",
+    "私下交易",
+    "扫码",
+)
+
+_TEXT_HARD_SIGNAL_KEYWORDS = (
+    "验证码",
+    "安全账户",
+    "屏幕共享",
+    "远程控制",
+    "立即转账",
+    "公检法",
+    "解冻费",
+    "刷流水",
+    "裸聊敲诈",
+)
+
+_TEXT_COMBINATION_RULES = (
+    ("转账", "验证码", 24, "出现转账+验证码组合"),
+    ("安全账户", "转账", 22, "出现安全账户+转账组合"),
+    ("远程", "转账", 16, "出现远程控制+转账组合"),
+    ("刷单", "垫付", 18, "出现刷单+垫付组合"),
+    ("贷款", "保证金", 18, "出现贷款+保证金组合"),
+    ("贷款", "解冻", 18, "出现贷款+解冻组合"),
+    ("征信", "注销", 16, "出现征信+注销组合"),
+    ("客服", "屏幕共享", 16, "出现客服+屏幕共享组合"),
+    ("退款", "链接", 14, "出现退款+链接组合"),
+    ("高收益", "内部消息", 14, "出现高收益+内部消息组合"),
+    ("投资", "带单", 14, "出现投资+带单组合"),
+    ("网恋", "投资", 16, "出现网恋+投资组合"),
+    ("裸聊", "转账", 20, "出现裸聊+转账组合"),
+    ("领导", "转账", 16, "出现领导+转账组合"),
+    ("游戏", "私下交易", 14, "出现游戏+私下交易组合"),
+    ("跑分", "银行卡", 20, "出现跑分+银行卡组合"),
+    ("退款", "验证码", 14, "出现退款+验证码组合"),
+)
+
+_FAST_RAG_MIN_SIMILARITY = 0.16
+_FAST_RAG_LOW_CONF_SIMILARITY = 0.24
+_FAST_RAG_LOW_SCORE_CUTOFF = 18
+_TEXT_MATCH_SEPARATOR_RE = re.compile(r"[\s\-_.,，。!！?？:：;；/\\|`~·•…'\"“”‘’()\[\]{}<>《》【】]+")
 
 _RISK_LEVEL_PRIORITY = {"low": 1, "medium": 2, "high": 3}
 _MODEL_MODES = {"pro", "flash"}
@@ -196,10 +335,12 @@ def _should_use_single_pass(mode: str, has_media: bool, has_audio: bool, has_vid
     )
 
 
-def _get_single_pass_system_prompt(mode: str) -> str:
+def _get_single_pass_system_prompt(mode: str, language: str = "zh-CN") -> str:
     if mode == "pro":
-        return _SINGLE_PASS_SYSTEM_PROMPT_PRO
-    return _SINGLE_PASS_SYSTEM_PROMPT_FLASH
+        base_prompt = _SINGLE_PASS_SYSTEM_PROMPT_PRO
+    else:
+        base_prompt = _SINGLE_PASS_SYSTEM_PROMPT_FLASH
+    return build_single_pass_system_prompt(base_prompt, language)
 
 
 def _is_ollama_native_streaming_enabled(base_url: str) -> bool:
@@ -256,6 +397,467 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_rule_severity(value: Any, default: str = "soft") -> str:
+    severity = str(value or default).strip().lower()
+    return "hard" if severity == "hard" else "soft"
+
+
+def _build_rule_meta(
+    item: dict[str, Any],
+    *,
+    default_id: str,
+    default_severity: str,
+    default_floor_score: int = 0,
+) -> dict[str, Any]:
+    return {
+        "rule_id": str(item.get("rule_id") or default_id).strip() or default_id,
+        "severity": _normalize_rule_severity(item.get("severity"), default=default_severity),
+        "floor_score": max(0, min(100, _safe_int(item.get("floor_score"), default_floor_score))),
+        "source_priority": list(item.get("source_priority") or ["fast_text_rules", "local_rag", "llm_review"]),
+    }
+
+
+def _parse_warning_pattern_rules(
+    raw_items: Any,
+    max_weight: int = 40,
+) -> tuple[tuple[re.Pattern[str], int, str, dict[str, Any]], ...]:
+    pattern_rules: list[tuple[re.Pattern[str], int, str, dict[str, Any]]] = []
+    for item in list(raw_items or []):
+        if not isinstance(item, dict):
+            continue
+        raw_pattern = str(item.get("pattern") or "").strip()
+        clue = str(item.get("clue") or "").strip()
+        weight = _safe_int(item.get("weight"), 0)
+        if not raw_pattern or not clue or weight <= 0:
+            continue
+        try:
+            compiled = re.compile(raw_pattern, re.IGNORECASE)
+        except re.error:
+            continue
+        normalized_weight = min(weight, max_weight)
+        meta = _build_rule_meta(
+            item,
+            default_id=f"pattern:{len(pattern_rules) + 1}",
+            default_severity="hard" if normalized_weight >= 30 else "soft",
+        )
+        pattern_rules.append((compiled, normalized_weight, clue, meta))
+    return tuple(pattern_rules)
+
+
+def _parse_warning_keyword_weights(raw_keywords: Any, max_weight: int = 30) -> dict[str, int]:
+    keyword_weights: dict[str, int] = {}
+    if not isinstance(raw_keywords, dict):
+        return keyword_weights
+
+    for raw_keyword, raw_weight in raw_keywords.items():
+        keyword = str(raw_keyword or "").strip()
+        weight = _safe_int(raw_weight, 0)
+        if keyword and weight > 0:
+            keyword_weights[keyword] = min(weight, max_weight)
+    return keyword_weights
+
+
+def _parse_structured_warning_rules(data: Any) -> dict[str, Any]:
+    parsed = {
+        "pattern_rules": [],
+        "keyword_rules": [],
+        "combination_rules": [],
+    }
+    for index, raw_rule in enumerate(list(data or []), start=1):
+        if not isinstance(raw_rule, dict):
+            continue
+        rule_type = str(raw_rule.get("type") or "").strip().lower()
+        clue = str(raw_rule.get("clue") or "").strip()
+        meta = _build_rule_meta(raw_rule, default_id=f"structured:{index}", default_severity="soft")
+        if rule_type == "pattern":
+            raw_pattern = str(raw_rule.get("pattern") or "").strip()
+            weight = _safe_int(raw_rule.get("weight"), 0)
+            if not raw_pattern or not clue or weight <= 0:
+                continue
+            try:
+                compiled = re.compile(raw_pattern, re.IGNORECASE)
+            except re.error:
+                continue
+            parsed["pattern_rules"].append((compiled, min(weight, 40), clue, meta))
+        elif rule_type == "keyword":
+            keyword = str(raw_rule.get("keyword") or "").strip()
+            weight = _safe_int(raw_rule.get("weight"), 0)
+            if not keyword or weight <= 0:
+                continue
+            parsed["keyword_rules"].append((keyword, min(weight, 30), clue or f"命中关键词: {keyword}", meta))
+        elif rule_type == "combination":
+            left_token = str(raw_rule.get("left") or "").strip()
+            right_token = str(raw_rule.get("right") or "").strip()
+            bonus = _safe_int(raw_rule.get("bonus"), 0)
+            if not left_token or not right_token or not clue or bonus <= 0:
+                continue
+            parsed["combination_rules"].append((left_token, right_token, min(bonus, 30), clue, meta))
+    return parsed
+
+
+def _parse_warning_combination_rules(
+    raw_items: Any,
+    max_bonus: int = 30,
+) -> tuple[tuple[str, str, int, str, dict[str, Any]], ...]:
+    combination_rules: list[tuple[str, str, int, str, dict[str, Any]]] = []
+    for item in list(raw_items or []):
+        if not isinstance(item, dict):
+            continue
+        left_token = str(item.get("left") or "").strip()
+        right_token = str(item.get("right") or "").strip()
+        clue = str(item.get("clue") or "").strip()
+        bonus = _safe_int(item.get("bonus"), 0)
+        if not left_token or not right_token or not clue or bonus <= 0:
+            continue
+        normalized_bonus = min(bonus, max_bonus)
+        meta = _build_rule_meta(
+            item,
+            default_id=f"combo:{len(combination_rules) + 1}",
+            default_severity="hard" if normalized_bonus >= 20 else "soft",
+        )
+        combination_rules.append((left_token, right_token, normalized_bonus, clue, meta))
+    return tuple(combination_rules)
+
+
+@lru_cache(maxsize=1)
+def _get_fast_warning_rule_overrides() -> dict[str, Any]:
+    project_root = Path(__file__).resolve().parent.parent.parent
+    default_path = project_root / "config" / "fast_warning_rules.json"
+    config_path = Path(os.getenv("FAST_WARNING_RULES_PATH", str(default_path))).expanduser()
+
+    overrides: dict[str, Any] = {
+        "pattern_rules": tuple(),
+        "keyword_rules": tuple(),
+        "keyword_weights": {},
+        "combination_rules": tuple(),
+        "score_policy": {},
+        "role_profiles": {},
+    }
+    if not config_path.exists():
+        return overrides
+
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"[预警] 读取规则配置失败: {config_path} ({exc})")
+        return overrides
+
+    pattern_rules = _parse_warning_pattern_rules(data.get("pattern_rules"), max_weight=40)
+    structured_rules = _parse_structured_warning_rules(data.get("structured_rules"))
+    keyword_weights = _parse_warning_keyword_weights(data.get("keyword_weights"), max_weight=30)
+    combination_rules = _parse_warning_combination_rules(data.get("combination_rules"), max_bonus=30)
+
+    raw_score_policy = data.get("score_policy")
+    score_policy = raw_score_policy if isinstance(raw_score_policy, dict) else {}
+
+    role_profiles: dict[str, dict[str, Any]] = {}
+    raw_role_profiles = data.get("role_profiles")
+    if isinstance(raw_role_profiles, dict):
+        for raw_role_key, raw_profile in raw_role_profiles.items():
+            if not isinstance(raw_profile, dict):
+                continue
+
+            role_key = normalize_user_role(str(raw_role_key or "general"))
+            profile_pattern_rules = _parse_warning_pattern_rules(raw_profile.get("pattern_rules"), max_weight=40)
+            profile_structured_rules = _parse_structured_warning_rules(raw_profile.get("structured_rules"))
+            profile_keyword_weights = _parse_warning_keyword_weights(raw_profile.get("keyword_weights"), max_weight=30)
+            profile_combination_rules = _parse_warning_combination_rules(raw_profile.get("combination_rules"), max_bonus=30)
+            profile_raw_score_policy = raw_profile.get("score_policy")
+            profile_score_policy = profile_raw_score_policy if isinstance(profile_raw_score_policy, dict) else {}
+
+            if role_key in role_profiles:
+                existing = role_profiles[role_key]
+                existing["pattern_rules"] = (
+                    tuple(existing.get("pattern_rules") or ())
+                    + profile_pattern_rules
+                    + tuple(profile_structured_rules.get("pattern_rules") or ())
+                )
+                existing["keyword_rules"] = (
+                    tuple(existing.get("keyword_rules") or ())
+                    + tuple(profile_structured_rules.get("keyword_rules") or ())
+                )
+                existing["keyword_weights"] = {
+                    **dict(existing.get("keyword_weights") or {}),
+                    **profile_keyword_weights,
+                }
+                existing["combination_rules"] = (
+                    tuple(existing.get("combination_rules") or ())
+                    + profile_combination_rules
+                    + tuple(profile_structured_rules.get("combination_rules") or ())
+                )
+                existing["score_policy"] = {
+                    **dict(existing.get("score_policy") or {}),
+                    **profile_score_policy,
+                }
+                continue
+
+            role_profiles[role_key] = {
+                "pattern_rules": profile_pattern_rules + tuple(profile_structured_rules.get("pattern_rules") or ()),
+                "keyword_rules": tuple(profile_structured_rules.get("keyword_rules") or ()),
+                "keyword_weights": profile_keyword_weights,
+                "combination_rules": profile_combination_rules + tuple(profile_structured_rules.get("combination_rules") or ()),
+                "score_policy": profile_score_policy,
+            }
+
+    return {
+        "pattern_rules": pattern_rules + tuple(structured_rules.get("pattern_rules") or ()),
+        "keyword_rules": tuple(structured_rules.get("keyword_rules") or ()),
+        "keyword_weights": keyword_weights,
+        "combination_rules": combination_rules + tuple(structured_rules.get("combination_rules") or ()),
+        "score_policy": score_policy,
+        "role_profiles": role_profiles,
+    }
+
+
+def _get_role_warning_profile(rule_overrides: dict[str, Any], user_role: str) -> dict[str, Any]:
+    role_profiles = rule_overrides.get("role_profiles")
+    if not isinstance(role_profiles, dict):
+        return {
+            "pattern_rules": tuple(),
+            "keyword_rules": tuple(),
+            "keyword_weights": {},
+            "combination_rules": tuple(),
+            "score_policy": {},
+        }
+
+    normalized_role = normalize_user_role(user_role or "general")
+    profile = role_profiles.get(normalized_role)
+    if not isinstance(profile, dict):
+        return {
+            "pattern_rules": tuple(),
+            "keyword_rules": tuple(),
+            "keyword_weights": {},
+            "combination_rules": tuple(),
+            "score_policy": {},
+        }
+
+    return {
+        "pattern_rules": tuple(profile.get("pattern_rules") or ()),
+        "keyword_rules": tuple(profile.get("keyword_rules") or ()),
+        "keyword_weights": dict(profile.get("keyword_weights") or {}),
+        "combination_rules": tuple(profile.get("combination_rules") or ()),
+        "score_policy": dict(profile.get("score_policy") or {}),
+    }
+
+
+def _get_shared_role_warning_rules(rule_overrides: dict[str, Any]) -> dict[str, Any]:
+    role_profiles = rule_overrides.get("role_profiles")
+    if not isinstance(role_profiles, dict):
+        return {
+            "pattern_rules": tuple(),
+            "keyword_rules": tuple(),
+            "keyword_weights": {},
+            "combination_rules": tuple(),
+        }
+
+    merged_pattern_items: list[tuple[re.Pattern[str], int, str, dict[str, Any]]] = []
+    merged_keyword_rules: list[tuple[str, int, str, dict[str, Any]]] = []
+    merged_keyword_weights: dict[str, int] = {}
+    merged_combination_items: list[tuple[str, str, int, str, dict[str, Any]]] = []
+
+    for raw_profile in role_profiles.values():
+        if not isinstance(raw_profile, dict):
+            continue
+
+        merged_pattern_items.extend(tuple(raw_profile.get("pattern_rules") or ()))
+        merged_keyword_rules.extend(tuple(raw_profile.get("keyword_rules") or ()))
+        merged_keyword_weights.update(dict(raw_profile.get("keyword_weights") or {}))
+        merged_combination_items.extend(tuple(raw_profile.get("combination_rules") or ()))
+
+    deduped_patterns: list[tuple[re.Pattern[str], int, str, dict[str, Any]]] = []
+    seen_patterns: set[tuple[str, int, str, str]] = set()
+    for pattern, weight, clue, meta in merged_pattern_items:
+        dedupe_key = (getattr(pattern, "pattern", str(pattern)), int(weight), str(clue), str(meta.get("rule_id")))
+        if dedupe_key in seen_patterns:
+            continue
+        seen_patterns.add(dedupe_key)
+        deduped_patterns.append((pattern, weight, clue, meta))
+
+    deduped_keyword_rules: list[tuple[str, int, str, dict[str, Any]]] = []
+    seen_keyword_rules: set[tuple[str, int, str, str]] = set()
+    for keyword, weight, clue, meta in merged_keyword_rules:
+        dedupe_key = (str(keyword), int(weight), str(clue), str(meta.get("rule_id")))
+        if dedupe_key in seen_keyword_rules:
+            continue
+        seen_keyword_rules.add(dedupe_key)
+        deduped_keyword_rules.append((keyword, weight, clue, meta))
+
+    deduped_combinations: list[tuple[str, str, int, str, dict[str, Any]]] = []
+    seen_combinations: set[tuple[str, str, int, str, str]] = set()
+    for left_token, right_token, bonus, clue, meta in merged_combination_items:
+        dedupe_key = (str(left_token), str(right_token), int(bonus), str(clue), str(meta.get("rule_id")))
+        if dedupe_key in seen_combinations:
+            continue
+        seen_combinations.add(dedupe_key)
+        deduped_combinations.append((left_token, right_token, bonus, clue, meta))
+
+    return {
+        "pattern_rules": tuple(deduped_patterns),
+        "keyword_rules": tuple(deduped_keyword_rules),
+        "keyword_weights": merged_keyword_weights,
+        "combination_rules": tuple(deduped_combinations),
+    }
+
+
+def _build_text_match_variants(text: str) -> tuple[str, ...]:
+    normalized = unicodedata.normalize("NFKC", str(text or "")).lower()
+    compact = _TEXT_MATCH_SEPARATOR_RE.sub("", normalized)
+    if compact and compact != normalized:
+        return normalized, compact
+    return (normalized,)
+
+
+def _match_token_in_variants(text_variants: tuple[str, ...], token: str) -> bool:
+    for token_variant in _build_text_match_variants(token):
+        if not token_variant:
+            continue
+        for text_variant in text_variants:
+            if token_variant in text_variant:
+                return True
+    return False
+
+
+def _find_token_spans(text: str, token: str) -> list[dict[str, Any]]:
+    if not text or not token:
+        return []
+    normalized_text = unicodedata.normalize("NFKC", str(text or ""))
+    normalized_token = unicodedata.normalize("NFKC", str(token or ""))
+    lowered_text = normalized_text.lower()
+    lowered_token = normalized_token.lower()
+    spans: list[dict[str, Any]] = []
+    start = 0
+    while lowered_token:
+        index = lowered_text.find(lowered_token, start)
+        if index < 0:
+            break
+        end = index + len(lowered_token)
+        spans.append({"text": normalized_text[index:end], "start": index, "end": end})
+        start = end
+    return spans
+
+
+def _dedupe_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, str]] = set()
+    for span in spans:
+        key = (int(span.get("start", -1)), int(span.get("end", -1)), str(span.get("text") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(span)
+    return deduped
+
+
+def _count_keyword_hits(text: str, keywords: tuple[str, ...]) -> int:
+    text_variants = _build_text_match_variants(text)
+    return sum(1 for keyword in keywords if keyword and _match_token_in_variants(text_variants, keyword))
+
+
+def _collect_role_profile_hits(
+    text: str,
+    text_variants: tuple[str, ...],
+    compact_text: str,
+    role_profile: dict[str, Any],
+) -> tuple[int, list[str]]:
+    hit_count = 0
+    matched_markers: list[str] = []
+
+    for pattern, _weight, clue, _meta in tuple(role_profile.get("pattern_rules") or ()):
+        if pattern.search(text) or (compact_text != text_variants[0] and pattern.search(compact_text)):
+            hit_count += 1
+            matched_markers.append(str(clue))
+
+    for keyword, _weight, clue, _meta in tuple(role_profile.get("keyword_rules") or ()):
+        if _match_token_in_variants(text_variants, keyword):
+            hit_count += 1
+            matched_markers.append(str(clue))
+
+    for keyword in dict(role_profile.get("keyword_weights") or {}).keys():
+        if _match_token_in_variants(text_variants, keyword):
+            hit_count += 1
+            matched_markers.append(f"关键词:{keyword}")
+
+    for left_token, right_token, _bonus, clue, _meta in tuple(role_profile.get("combination_rules") or ()):
+        if _match_token_in_variants(text_variants, left_token) and _match_token_in_variants(text_variants, right_token):
+            hit_count += 1
+            matched_markers.append(str(clue))
+
+    return hit_count, matched_markers
+
+
+def _has_consultative_context(text: str) -> bool:
+    text_variants = _build_text_match_variants(text)
+    return any(_match_token_in_variants(text_variants, keyword) for keyword in _TEXT_CONSULTATIVE_CONTEXT_KEYWORDS)
+
+
+def _calibrate_fast_rag_score(
+    raw_rag_score: int,
+    top_similarity: float,
+    avg_similarity: float,
+    hit_count: int,
+) -> int:
+    similarity_score = int(round((top_similarity * 0.7 + avg_similarity * 0.3) * 100))
+    calibrated = int(round(raw_rag_score * 0.62 + similarity_score * 0.38))
+
+    if top_similarity < 0.20:
+        calibrated = int(calibrated * 0.62)
+    elif top_similarity < _FAST_RAG_LOW_CONF_SIMILARITY:
+        calibrated = int(calibrated * 0.80)
+
+    if hit_count >= 3 and avg_similarity >= _FAST_RAG_LOW_CONF_SIMILARITY:
+        calibrated += 4
+
+    return _clamp_risk_score(calibrated)
+
+
+def _warning_evidence_weight(warning: Optional[dict]) -> float:
+    if not warning:
+        return 0.0
+
+    score = _safe_int(warning.get("risk_score"), 0)
+    source = str(warning.get("source", "") or "")
+    weight = 0.58 + min(0.42, score / 220.0)
+
+    if source == "fast_text_rules":
+        hard_signal_count = _safe_int(warning.get("hard_signal_count"), 0)
+        weight += min(0.24, hard_signal_count * 0.08)
+        if bool(warning.get("consultative_context")) and hard_signal_count <= 1:
+            weight -= 0.20
+    elif source == "fast_rag_probe":
+        top_similarity = _safe_float(warning.get("rag_top_similarity"), 0.0)
+        weight += min(0.26, top_similarity * 0.7)
+        if top_similarity < _FAST_RAG_LOW_CONF_SIMILARITY:
+            weight -= 0.16
+
+    return max(0.35, min(1.45, weight))
+
+
+def _build_fallback_low_risk_score(text: str, has_media: bool) -> int:
+    normalized = (text or "").strip()
+    if not normalized:
+        return 0
+
+    score = 2
+    text_len = len(normalized)
+    if text_len >= 24:
+        score += 1
+    if text_len >= 80:
+        score += 2
+    if "?" in normalized or "？" in normalized:
+        score += 1
+    if has_media:
+        score = max(score, 4)
+
+    return min(score, 12)
 
 
 def _trim_prompt_text(value: Any, max_chars: int = 360) -> str:
@@ -414,10 +1016,13 @@ def _build_single_pass_user_prompt(
     has_media: bool,
     memory_context: Optional[dict[str, Any]] = None,
     dynamic_thresholds: Optional[dict[str, Any]] = None,
+    language: str = "zh-CN",
 ) -> str:
     memory_context = memory_context or {}
     dynamic_thresholds = dynamic_thresholds or {}
     combined_profile_text = str(memory_context.get("combined_profile_text") or "none")
+    normalized_language = normalize_output_language(language)
+    role_prompt_guidance = build_role_prompt_guidance(user_role or "general", normalized_language)
 
     warning_source = str((early_warning or {}).get("source", "")).strip()
     warning_score = int((early_warning or {}).get("risk_score", 0))
@@ -438,12 +1043,21 @@ def _build_single_pass_user_prompt(
     high_threshold = _safe_int(dynamic_thresholds.get("high_threshold"), 75)
     threshold_reasons = list(dynamic_thresholds.get("adjustment_reasons") or [])
     threshold_reason_text = "；".join(str(item) for item in threshold_reasons) if threshold_reasons else "无"
+    language_instruction = ""
+    if normalized_language == "en-US":
+        language_instruction = (
+            "Output language: English only. Write WARNING_MESSAGE, risk explanation, "
+            "action suggestions, and the full Markdown report in English. Keep metadata keys unchanged.\n\n"
+        )
+
+    role_guidance_label = "Role-specific guidance" if normalized_language == "en-US" else "Role-specific guidance"
 
     media_hint = "用户包含媒体文件上传；请在报告中说明当前结论以文本与预警为基础。" if has_media else "本次输入为文本场景。"
 
-    return (
+    return language_instruction + (
         "请基于以下信息输出反诈分析：\n"
         f"用户角色: {user_role or 'general'}\n"
+        f"{role_guidance_label}:\n{role_prompt_guidance}\n"
         f"组合画像:\n{combined_profile_text}\n"
         f"{media_hint}\n"
         f"快速预警分数: {warning_score}\n"
@@ -478,9 +1092,11 @@ def _parse_single_pass_response(
     early_warning: Optional[dict],
     dynamic_thresholds: Optional[dict[str, Any]] = None,
     memory_context: Optional[dict[str, Any]] = None,
+    language: str = "zh-CN",
 ) -> dict[str, Any]:
     dynamic_thresholds = dynamic_thresholds or {}
     memory_context = memory_context or {}
+    english_output = normalize_output_language(language) == "en-US"
 
     normalized = (raw_output or "").replace("\r\n", "\n")
 
@@ -537,7 +1153,9 @@ def _parse_single_pass_response(
     else:
         risk_level = _max_level(parsed_level, fallback_level)
 
-    scam_type = (scam_type_match.group(1).strip() if scam_type_match else "") or "未识别"
+    scam_type = (scam_type_match.group(1).strip() if scam_type_match else "") or (
+        "not_identified" if english_output else "未识别"
+    )
     guardian_alert = _parse_bool(
         guardian_alert_match.group(1).strip() if guardian_alert_match else "",
         default=risk_level == "high",
@@ -547,12 +1165,35 @@ def _parse_single_pass_response(
         warning_message_match.group(1).strip() if warning_message_match else ""
     ) or str((early_warning or {}).get("warning_message", "")).strip()
 
-    final_report = report_text.strip() or warning_message or "系统已完成分析，请保持警惕并避免敏感操作。"
+    fallback_report = (
+        "The system has completed the analysis. Stay cautious and avoid sensitive actions until verification is complete."
+        if english_output
+        else "系统已完成分析，请保持警惕并避免敏感操作。"
+    )
+    final_report = report_text.strip() or warning_message or fallback_report
     risk_clues = list((early_warning or {}).get("risk_clues") or [])
     action_items = _extract_action_items_from_report(final_report)
 
     if not action_items:
-        if risk_level == "high":
+        if english_output and risk_level == "high":
+            action_items = [
+                "Stop transfers, downloads, screen sharing, and code sharing immediately",
+                "Call 110 or 96110 if money or account access is involved",
+                "Notify a guardian or trusted emergency contact",
+            ]
+        elif english_output and risk_level == "medium":
+            action_items = [
+                "Pause payment or account operations",
+                "Verify the identity through an official channel",
+                "Preserve screenshots, audio, video, and chat records",
+            ]
+        elif english_output:
+            action_items = [
+                "Keep the conversation in official channels",
+                "Do not click suspicious links or install unknown apps",
+                "Avoid sharing sensitive information before verification",
+            ]
+        elif risk_level == "high":
             action_items = [
                 "立即停止转账和共享屏幕",
                 "保留证据并拨打 110 或 96110",
@@ -571,7 +1212,7 @@ def _parse_single_pass_response(
                 "如被催促转账请立即中断",
             ]
 
-    return {
+    result = {
         "detection_id": f"det_{uuid.uuid4().hex[:12]}",
         "intent": "single_pass_analysis",
         "short_term_memory_summary": str(memory_context.get("short_term_memory_summary") or ""),
@@ -584,6 +1225,21 @@ def _parse_single_pass_response(
         "risk_level": risk_level,
         "scam_type": scam_type,
         "risk_clues": risk_clues,
+        "matched_rule_ids": list((early_warning or {}).get("matched_rule_ids") or []),
+        "hard_rule_ids": list((early_warning or {}).get("hard_rule_ids") or []),
+        "soft_rule_ids": list((early_warning or {}).get("soft_rule_ids") or []),
+        "matched_spans": list((early_warning or {}).get("matched_spans") or []),
+        "source_priority": list((early_warning or {}).get("source_priority") or ["single_pass_llm", "llm_review"]),
+        "popup_severity": (early_warning or {}).get("popup_severity")
+        or ("blocking" if risk_level == "high" else "soft" if risk_level == "medium" else "none"),
+        "critical_guardrail_triggered": bool((early_warning or {}).get("critical_guardrail_triggered", False)),
+        "voice_warning_required": bool(
+            (early_warning or {}).get("voice_warning_required", risk_level == "high")
+        ),
+        "guardian_intervention_required": bool(
+            (early_warning or {}).get("guardian_intervention_required", risk_level == "high" and guardian_alert)
+        ),
+        "score_breakdown": (early_warning or {}).get("score_breakdown"),
         "warning_message": warning_message,
         "guardian_alert": guardian_alert,
         "alert_reason": "single_pass_llm",
@@ -602,6 +1258,7 @@ def _parse_single_pass_response(
             "adjustment_reasons": list(dynamic_thresholds.get("adjustment_reasons") or []),
         },
     }
+    return apply_critical_warning_floor(result, early_warning)
 
 
 def _get_single_pass_fraud_llm() -> Optional[ChatOpenAI]:
@@ -701,7 +1358,9 @@ async def _stream_single_pass_chunks(
         )
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", _ollama_api_chat_url(base_url), json=payload) as response:
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    detail = (await response.aread()).decode("utf-8", errors="replace")
+                    raise RuntimeError(f"Ollama chat failed {response.status_code}: {detail[:500]}")
                 async for line in response.aiter_lines():
                     if not line:
                         continue
@@ -754,6 +1413,7 @@ async def _run_single_pass_detection_stream(
     early_warning: Optional[dict],
     has_media: bool,
     model_mode: str,
+    language: str = "zh-CN",
     memory_context: Optional[dict[str, Any]] = None,
     dynamic_thresholds: Optional[dict[str, Any]] = None,
 ) -> tuple[dict[str, Any], int]:
@@ -771,8 +1431,9 @@ async def _run_single_pass_detection_stream(
         has_media=has_media,
         memory_context=memory_context,
         dynamic_thresholds=dynamic_thresholds,
+        language=language,
     )
-    system_prompt = _get_single_pass_system_prompt(model_mode)
+    system_prompt = _get_single_pass_system_prompt(model_mode, language)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
@@ -785,8 +1446,10 @@ async def _run_single_pass_detection_stream(
     marker_seen = False
     chunk_count = 0
     llm_started_at = perf_counter()
+    first_report_chunk_ms: Optional[float] = None
     llm_metadata: dict[str, Any] = {}
     published_metadata: dict[str, Any] = {}
+    llm_error: Optional[str] = None
 
     def publish_metadata_if_changed(force: bool = False) -> None:
         changed = force or any(published_metadata.get(key) != value for key, value in llm_metadata.items())
@@ -803,103 +1466,111 @@ async def _run_single_pass_detection_stream(
             },
         )
 
-    async for chunk_text, _backend_name in _stream_single_pass_chunks(messages, model_config, system_prompt):
-        if not chunk_text:
-            continue
+    try:
+        async for chunk_text, _backend_name in _stream_single_pass_chunks(messages, model_config, system_prompt):
+            if not chunk_text:
+                continue
 
-        raw_parts.append(chunk_text)
+            raw_parts.append(chunk_text)
 
-        if marker_seen:
-            chunk_count += 1
-            task_manager.publish_task_event(
-                task_id,
-                {
-                    "event": "report_chunk",
-                    "chunk": chunk_text,
-                    "chunk_index": chunk_count,
-                },
-            )
-            task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
-            continue
-
-        buffered_prefix += chunk_text
-        llm_metadata.update(_parse_single_pass_metadata(buffered_prefix))
-        publish_metadata_if_changed()
-
-        marker_index = buffered_prefix.find(_SINGLE_PASS_REPORT_SEPARATOR)
-        if marker_index >= 0:
-            marker_seen = True
-            llm_metadata.update(_parse_single_pass_metadata(buffered_prefix[:marker_index]))
-            publish_metadata_if_changed(force=True)
-            report_text_after_marker = buffered_prefix[marker_index + len(_SINGLE_PASS_REPORT_SEPARATOR):]
-            buffered_prefix = ""
-            if report_text_after_marker:
+            if marker_seen:
                 chunk_count += 1
-
                 task_manager.publish_task_event(
                     task_id,
                     {
                         "event": "report_chunk",
-                        "chunk": report_text_after_marker,
-                        "chunk_index": chunk_count,
-                    },
-                )
-                task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
-            continue
-
-        metadata_complete = all(
-            key in llm_metadata
-            for key in ["risk_score", "risk_level", "scam_type", "guardian_alert", "warning_message"]
-        )
-        if metadata_complete:
-            lines = buffered_prefix.splitlines(keepends=True)
-            metadata_line_count = 0
-            for line in lines:
-                if re.match(
-                    r"^\s*(RISK_SCORE|RISK_LEVEL|SCAM_TYPE|GUARDIAN_ALERT|WARNING_MESSAGE)\s*:",
-                    line,
-                    re.IGNORECASE,
-                ):
-                    metadata_line_count += 1
-                    continue
-                if not line.strip() or line.strip() == "---REPORT---":
-                    metadata_line_count += 1
-                    continue
-                break
-
-            report_candidate = "".join(lines[metadata_line_count:]).lstrip()
-            if report_candidate:
-                marker_seen = True
-                buffered_prefix = ""
-                chunk_count += 1
-
-                task_manager.publish_task_event(
-                    task_id,
-                    {
-                        "event": "report_chunk",
-                        "chunk": report_candidate,
+                        "chunk": chunk_text,
                         "chunk_index": chunk_count,
                     },
                 )
                 task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
                 continue
 
-        # Fail-safe: if the model does not follow the separator protocol, expose output after a small buffer.
-        if len(buffered_prefix) > 360 and ("risk_score" not in llm_metadata or len(buffered_prefix) > 900):
-            marker_seen = True
-            chunk_count += 1
-            if first_report_chunk_ms is None:
-                first_report_chunk_ms = _elapsed_ms(llm_started_at)
-            task_manager.publish_task_event(
-                task_id,
-                {
-                    "event": "report_chunk",
-                    "chunk": buffered_prefix,
-                    "chunk_index": chunk_count,
-                },
+            buffered_prefix += chunk_text
+            llm_metadata.update(_parse_single_pass_metadata(buffered_prefix))
+            publish_metadata_if_changed()
+
+            marker_index = buffered_prefix.find(_SINGLE_PASS_REPORT_SEPARATOR)
+            if marker_index >= 0:
+                marker_seen = True
+                llm_metadata.update(_parse_single_pass_metadata(buffered_prefix[:marker_index]))
+                publish_metadata_if_changed(force=True)
+                report_text_after_marker = buffered_prefix[marker_index + len(_SINGLE_PASS_REPORT_SEPARATOR):]
+                buffered_prefix = ""
+                if report_text_after_marker:
+                    chunk_count += 1
+                    if first_report_chunk_ms is None:
+                        first_report_chunk_ms = _elapsed_ms(llm_started_at)
+
+                    task_manager.publish_task_event(
+                        task_id,
+                        {
+                            "event": "report_chunk",
+                            "chunk": report_text_after_marker,
+                            "chunk_index": chunk_count,
+                        },
+                    )
+                    task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
+                continue
+
+            metadata_complete = all(
+                key in llm_metadata
+                for key in ["risk_score", "risk_level", "scam_type", "guardian_alert", "warning_message"]
             )
-            buffered_prefix = ""
-            task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
+            if metadata_complete:
+                lines = buffered_prefix.splitlines(keepends=True)
+                metadata_line_count = 0
+                for line in lines:
+                    if re.match(
+                        r"^\s*(RISK_SCORE|RISK_LEVEL|SCAM_TYPE|GUARDIAN_ALERT|WARNING_MESSAGE)\s*:",
+                        line,
+                        re.IGNORECASE,
+                    ):
+                        metadata_line_count += 1
+                        continue
+                    if not line.strip() or line.strip() == "---REPORT---":
+                        metadata_line_count += 1
+                        continue
+                    break
+
+                report_candidate = "".join(lines[metadata_line_count:]).lstrip()
+                if report_candidate:
+                    marker_seen = True
+                    buffered_prefix = ""
+                    chunk_count += 1
+                    if first_report_chunk_ms is None:
+                        first_report_chunk_ms = _elapsed_ms(llm_started_at)
+
+                    task_manager.publish_task_event(
+                        task_id,
+                        {
+                            "event": "report_chunk",
+                            "chunk": report_candidate,
+                            "chunk_index": chunk_count,
+                        },
+                    )
+                    task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
+                    continue
+
+            # Fail-safe: if the model does not follow the separator protocol, expose output after a small buffer.
+            if len(buffered_prefix) > 360 and ("risk_score" not in llm_metadata or len(buffered_prefix) > 900):
+                marker_seen = True
+                chunk_count += 1
+                if first_report_chunk_ms is None:
+                    first_report_chunk_ms = _elapsed_ms(llm_started_at)
+                task_manager.publish_task_event(
+                    task_id,
+                    {
+                        "event": "report_chunk",
+                        "chunk": buffered_prefix,
+                        "chunk_index": chunk_count,
+                    },
+                )
+                buffered_prefix = ""
+                task_manager.update_task_progress(task_id, min(94, 40 + int(chunk_count * 1.5)))
+    except (httpx.HTTPError, RuntimeError) as exc:
+        llm_error = str(exc)
+        print(f"[single_pass_llm] streaming failed, fallback to early warning: {llm_error}")
 
     raw_output = "".join(raw_parts)
     parsed_result = _parse_single_pass_response(
@@ -907,11 +1578,16 @@ async def _run_single_pass_detection_stream(
         early_warning=early_warning,
         dynamic_thresholds=dynamic_thresholds,
         memory_context=memory_context,
+        language=language,
     )
     parsed_result["performance_timing"] = {
         "report_llm_api_roundtrip_ms": _elapsed_ms(llm_started_at),
         "report_llm_total_ms": _elapsed_ms(total_started_at),
+        "report_first_chunk_ms": first_report_chunk_ms,
     }
+    if llm_error:
+        parsed_result["performance_timing"]["report_llm_error"] = llm_error
+        parsed_result["performance_timing"]["report_llm_fallback"] = "early_warning"
 
     return parsed_result, chunk_count
 
@@ -995,13 +1671,34 @@ async def _build_fast_rag_warning(message: str) -> Optional[dict]:
     if not retrieved_cases:
         return None
 
+    similarity_values = [
+        _safe_float(getattr(case, "similarity", 0.0), 0.0)
+        for case in retrieved_cases
+    ]
+    top_similarity = max(similarity_values) if similarity_values else 0.0
+    avg_similarity = (sum(similarity_values) / len(similarity_values)) if similarity_values else 0.0
+
+    if top_similarity < _FAST_RAG_MIN_SIMILARITY:
+        return None
+
     search_hits = [create_search_hit_from_retrieved_case(case) for case in retrieved_cases]
     rag_result = detector.assess(query, search_hits)
 
-    rag_score = int(float(rag_result.confidence) * 100)
-    rag_level = _normalize_level(rag_result.risk_level, rag_score)
+    raw_rag_score = int(float(rag_result.confidence) * 100)
+    rag_score = _calibrate_fast_rag_score(
+        raw_rag_score=raw_rag_score,
+        top_similarity=top_similarity,
+        avg_similarity=avg_similarity,
+        hit_count=len(retrieved_cases),
+    )
+    detector_level = _normalize_level(rag_result.risk_level, raw_rag_score)
+    score_level = _risk_level_from_score(rag_score)
+    if top_similarity < _FAST_RAG_LOW_CONF_SIMILARITY:
+        rag_level = score_level
+    else:
+        rag_level = _max_level(detector_level, score_level)
 
-    if rag_level == "low" and rag_score < 12:
+    if rag_level == "low" and rag_score < _FAST_RAG_LOW_SCORE_CUTOFF:
         return None
 
     clues: list[str] = []
@@ -1010,6 +1707,7 @@ async def _build_fast_rag_warning(message: str) -> Optional[dict]:
     for tag in (rag_result.matched_tags or [])[:3]:
         clues.append(f"RAG标签: {tag}")
     clues.append(f"RAG命中知识片段: {len(rag_result.hits)}条")
+    clues.append(f"RAG最高相似度: {top_similarity:.2f}")
 
     if rag_level == "high":
         warning_message = "RAG检索高度匹配诈骗知识，请立即暂停资金与账号操作。"
@@ -1039,6 +1737,11 @@ async def _build_fast_rag_warning(message: str) -> Optional[dict]:
         "warning_message": warning_message,
         "source": "fast_rag_probe",
         "is_preliminary": True,
+        "popup_severity": "soft" if rag_level in {"medium", "high"} else "none",
+        "source_priority": ["local_rag", "fast_text_rules", "llm_review"],
+        "rag_raw_score": _clamp_risk_score(raw_rag_score),
+        "rag_top_similarity": round(top_similarity, 4),
+        "rag_avg_similarity": round(avg_similarity, 4),
         "rag_context": rag_context,
         "similar_cases": rag_context,
     }
@@ -1052,17 +1755,49 @@ def _merge_fast_warnings(
 ) -> Optional[dict]:
     warning: Optional[dict] = None
 
-    if rule_warning and rag_warning:
+    if rule_warning and rule_warning.get("source") == "critical_text_guardrail":
+        warning = dict(rule_warning)
+        if rag_warning:
+            warning["risk_clues"] = list(
+                dict.fromkeys(
+                    list(warning.get("risk_clues") or [])
+                    + list(rag_warning.get("risk_clues") or [])
+                )
+            )[:8]
+            warning["rag_context"] = list(rag_warning.get("rag_context") or [])
+            warning["similar_cases"] = list(rag_warning.get("similar_cases") or rag_warning.get("rag_context") or [])
+            warning["source_priority"] = list(
+                dict.fromkeys(
+                    list(warning.get("source_priority") or ["critical_text_guardrail", "fast_text_rules", "local_rag"])
+                    + list(rag_warning.get("source_priority") or ["local_rag"])
+                )
+            )
+
+    elif rule_warning and rag_warning:
         rule_score = int(rule_warning.get("risk_score", 0))
         rag_score = int(rag_warning.get("risk_score", 0))
-        merged_score = min(99, int(rule_score * 0.55 + rag_score * 0.45))
-
-        merged_level = _max_level(
-            str(rule_warning.get("risk_level", "low")),
-            str(rag_warning.get("risk_level", "low")),
+        rule_weight = _warning_evidence_weight(rule_warning)
+        rag_weight = _warning_evidence_weight(rag_warning)
+        merged_score = min(
+            99,
+            int(round((rule_score * rule_weight + rag_score * rag_weight) / max(rule_weight + rag_weight, 0.01))),
         )
+
+        rule_level = _normalize_level(str(rule_warning.get("risk_level", "low")), rule_score)
+        rag_level = _normalize_level(str(rag_warning.get("risk_level", "low")), rag_score)
+        max_source_level = _max_level(rule_level, rag_level)
+        merged_level = _risk_level_from_score(merged_score)
+
+        has_dual_medium_signal = rule_score >= 45 and rag_score >= 45
+        has_single_strong_signal = max(rule_score, rag_score) >= 86
+
+        if max_source_level == "high" and (has_dual_medium_signal or has_single_strong_signal):
+            merged_level = "high"
+        elif max_source_level == "medium" and merged_level == "low":
+            merged_level = "medium"
+
         if merged_level == "high":
-            merged_score = max(merged_score, 78)
+            merged_score = max(merged_score, 78 if has_dual_medium_signal else 74)
             warning_message = "规则与RAG双重信号均提示高风险，请立即停止转账并核验身份。"
         elif merged_level == "medium":
             merged_score = max(merged_score, 45)
@@ -1087,6 +1822,34 @@ def _merge_fast_warnings(
             "warning_message": warning_message,
             "source": "rules_rag_fusion",
             "is_preliminary": True,
+            "signal_severity": "hard" if rule_warning.get("signal_severity") == "hard" else "soft",
+            "matched_rule_ids": list(dict.fromkeys(list(rule_warning.get("matched_rule_ids") or []))),
+            "hard_rule_ids": list(dict.fromkeys(list(rule_warning.get("hard_rule_ids") or []))),
+            "soft_rule_ids": list(dict.fromkeys(list(rule_warning.get("soft_rule_ids") or []))),
+            "matched_spans": list(rule_warning.get("matched_spans") or []),
+            "source_priority": list(
+                dict.fromkeys(
+                    list(rule_warning.get("source_priority") or ["fast_text_rules", "local_rag", "llm_review"])
+                    + list(rag_warning.get("source_priority") or ["local_rag", "llm_review"])
+                )
+            ),
+            "popup_severity": "blocking" if merged_level == "high" else "soft" if merged_level == "medium" else "none",
+            "voice_warning_required": merged_level == "high",
+            "guardian_intervention_required": merged_level == "high"
+            and bool(rule_warning.get("hard_rule_ids") or rule_warning.get("critical_guardrail_triggered")),
+            "score_breakdown": {
+                "source": "rules_rag_fusion",
+                "rule": rule_warning.get("score_breakdown"),
+                "rag": {
+                    "raw_score": rag_warning.get("rag_raw_score"),
+                    "top_similarity": rag_warning.get("rag_top_similarity"),
+                    "avg_similarity": rag_warning.get("rag_avg_similarity"),
+                },
+            },
+            "fusion_weights": {
+                "rule": round(rule_weight, 3),
+                "rag": round(rag_weight, 3),
+            },
             "rag_context": list(rag_warning.get("rag_context") or []),
             "similar_cases": list(rag_warning.get("similar_cases") or rag_warning.get("rag_context") or []),
         }
@@ -1253,16 +2016,19 @@ async def _build_fast_early_warning(
     message: str,
     has_media: bool,
     image_ai_warning: Optional[dict] = None,
+    user_role: str = "general",
 ) -> Optional[dict]:
-    rule_warning = _build_fast_text_warning(message, has_media=has_media)
+    normalized_role = normalize_user_role(user_role or "general")
+    rule_warning = _build_fast_text_warning(message, has_media=has_media, user_role=normalized_role)
     rag_warning = None
+    rag_timeout_sec = max(0.4, min(2.5, _safe_float(os.getenv("FAST_EARLY_WARNING_RAG_TIMEOUT_SEC"), 1.4)))
 
     text = (message or "").strip()
     if text:
         try:
             rag_warning = await asyncio.wait_for(
                 _build_fast_rag_warning(text),
-                timeout=1.8,
+                timeout=rag_timeout_sec,
             )
         except asyncio.TimeoutError:
             print("[预警] 快速RAG超时，回退规则预警")
@@ -1290,16 +2056,19 @@ async def _build_fast_early_warning(
         fallback_clues = ["等待用户输入内容"]
 
     return {
-        "risk_score": 6 if text else 0,
+        "risk_score": _build_fallback_low_risk_score(text, has_media=has_media),
         "risk_level": "low",
         "risk_clues": fallback_clues,
         "warning_message": fallback_message,
         "source": "fast_fallback",
         "is_preliminary": True,
+        "user_role": normalized_role,
+        "popup_severity": "none",
+        "source_priority": ["fast_fallback", "llm_review"],
     }
 
 
-def _build_fast_text_warning(message: str, has_media: bool) -> Optional[dict]:
+def _build_fast_text_warning(message: str, has_media: bool, user_role: str = "general") -> Optional[dict]:
     text = (message or "").strip()
 
     if not text:
@@ -1312,41 +2081,287 @@ def _build_fast_text_warning(message: str, has_media: bool) -> Optional[dict]:
             "warning_message": "已收到媒体文件，正在进行AI伪造率快速检测。",
             "source": "media_ai_pending",
             "is_preliminary": True,
+            "popup_severity": "none",
+            "source_priority": ["media_ai_pending", "fast_text_rules", "local_rag", "llm_review"],
         }
+
+    critical_warning = build_critical_text_guardrail_warning(text)
+    if critical_warning is not None:
+        warning = dict(critical_warning)
+        warning["user_role"] = normalize_user_role(user_role or "general")
+        if has_media:
+            warning["warning_message"] = (
+                f"{warning['warning_message']} 同时存在媒体内容，后续会继续进行图像/语音/视频核验。"
+            )
+        return warning
 
     score = 0
     clues = []
-    lower_text = text.lower()
+    matched_rule_ids: list[str] = []
+    hard_rule_ids: list[str] = []
+    soft_rule_ids: list[str] = []
+    score_components: list[dict[str, Any]] = []
+    matched_spans: list[dict[str, Any]] = []
+    source_priority = ["fast_text_rules", "local_rag", "llm_review"]
+    text_variants = _build_text_match_variants(text)
+    compact_text = text_variants[-1]
+    normalized_role = normalize_user_role(user_role or "general")
+    consultative_context = _has_consultative_context(text)
 
-    for pattern, weight, clue in _TEXT_PATTERN_RULES:
-        if pattern.search(text):
+    rule_overrides = _get_fast_warning_rule_overrides()
+    shared_role_rules = _get_shared_role_warning_rules(rule_overrides)
+    role_profile = _get_role_warning_profile(rule_overrides, normalized_role)
+    pattern_rules = (
+        _TEXT_PATTERN_RULES
+        + tuple(rule_overrides.get("pattern_rules") or ())
+        + tuple(shared_role_rules.get("pattern_rules") or ())
+    )
+    keyword_rules = (
+        tuple(rule_overrides.get("keyword_rules") or ())
+        + tuple(shared_role_rules.get("keyword_rules") or ())
+    )
+    keyword_weights = {
+        **_TEXT_KEYWORD_WEIGHTS,
+        **dict(rule_overrides.get("keyword_weights") or {}),
+        **dict(shared_role_rules.get("keyword_weights") or {}),
+    }
+    combination_rules = (
+        _TEXT_COMBINATION_RULES
+        + tuple(rule_overrides.get("combination_rules") or ())
+        + tuple(shared_role_rules.get("combination_rules") or ())
+    )
+    score_policy = dict(rule_overrides.get("score_policy") or {})
+    role_score_policy = dict(role_profile.get("score_policy") or {})
+    role_specific_hit_count, role_specific_markers = _collect_role_profile_hits(
+        text=text,
+        text_variants=text_variants,
+        compact_text=compact_text,
+        role_profile=role_profile,
+    )
+
+    for index, pattern_rule in enumerate(pattern_rules, start=1):
+        if len(pattern_rule) == 4:
+            pattern, weight, clue, meta = pattern_rule
+            rule_id = str(meta.get("rule_id") or f"pattern:{index}")
+            severity = _normalize_rule_severity(meta.get("severity"), default="hard" if weight >= 30 else "soft")
+            floor_score = max(0, _safe_int(meta.get("floor_score"), 0))
+            source_priority = list(meta.get("source_priority") or source_priority)
+        else:
+            pattern, weight, clue = pattern_rule
+            rule_id = f"pattern:{index}"
+            severity = "hard" if weight >= 30 else "soft"
+            floor_score = 0
+        match = pattern.search(text) or (compact_text != text_variants[0] and pattern.search(compact_text))
+        if match:
             score += weight
+            if floor_score > 0:
+                score = max(score, floor_score)
+            clues.append(clue)
+            matched_rule_ids.append(rule_id)
+            (hard_rule_ids if severity == "hard" else soft_rule_ids).append(rule_id)
+            matched_spans.extend(
+                [{"rule_id": rule_id, **span} for span in _find_token_spans(text, str(match.group(0) or ""))]
+            )
+            score_components.append(
+                {
+                    "id": rule_id,
+                    "type": "pattern",
+                    "severity": severity,
+                    "score": weight,
+                    "floor_score": floor_score,
+                    "floor_applied": floor_score > 0,
+                    "clue": clue,
+                }
+            )
+
+    for keyword, weight, clue, meta in keyword_rules:
+        if _match_token_in_variants(text_variants, keyword):
+            rule_id = str(meta.get("rule_id") or f"keyword:{keyword}")
+            severity = _normalize_rule_severity(meta.get("severity"), default="soft")
+            floor_score = max(0, _safe_int(meta.get("floor_score"), 0))
+            source_priority = list(meta.get("source_priority") or source_priority)
+            score += weight
+            if floor_score > 0:
+                score = max(score, floor_score)
+            matched_rule_ids.append(rule_id)
+            (hard_rule_ids if severity == "hard" else soft_rule_ids).append(rule_id)
+            matched_spans.extend([{"rule_id": rule_id, **span} for span in _find_token_spans(text, keyword)])
+            score_components.append(
+                {
+                    "id": rule_id,
+                    "type": "keyword",
+                    "severity": severity,
+                    "score": weight,
+                    "floor_score": floor_score,
+                    "floor_applied": floor_score > 0,
+                    "keyword": keyword,
+                    "clue": clue,
+                }
+            )
             clues.append(clue)
 
-    for keyword, weight in _TEXT_KEYWORD_WEIGHTS.items():
-        if keyword in text or keyword in lower_text:
+    for keyword, weight in keyword_weights.items():
+        if _match_token_in_variants(text_variants, keyword):
             score += weight
+            rule_id = f"keyword:{keyword}"
+            severity = "hard" if keyword in _TEXT_HARD_SIGNAL_KEYWORDS or weight >= 24 else "soft"
+            matched_rule_ids.append(rule_id)
+            (hard_rule_ids if severity == "hard" else soft_rule_ids).append(rule_id)
+            matched_spans.extend([{"rule_id": rule_id, **span} for span in _find_token_spans(text, keyword)])
+            score_components.append(
+                {"id": rule_id, "type": "keyword", "severity": severity, "score": weight, "keyword": keyword}
+            )
             clues.append(f"命中关键词: {keyword}")
+
+    for index, combo_rule in enumerate(combination_rules, start=1):
+        if len(combo_rule) == 5:
+            left_token, right_token, bonus, combo_clue, meta = combo_rule
+            rule_id = str(meta.get("rule_id") or f"combo:{index}")
+            severity = _normalize_rule_severity(meta.get("severity"), default="hard" if bonus >= 20 else "soft")
+            floor_score = max(0, _safe_int(meta.get("floor_score"), 0))
+            source_priority = list(meta.get("source_priority") or source_priority)
+        else:
+            left_token, right_token, bonus, combo_clue = combo_rule
+            rule_id = f"combo:{index}"
+            severity = "hard" if bonus >= 20 else "soft"
+            floor_score = 0
+        if _match_token_in_variants(text_variants, left_token) and _match_token_in_variants(text_variants, right_token):
+            score += bonus
+            if floor_score > 0:
+                score = max(score, floor_score)
+            clues.append(combo_clue)
+            matched_rule_ids.append(rule_id)
+            (hard_rule_ids if severity == "hard" else soft_rule_ids).append(rule_id)
+            matched_spans.extend([{"rule_id": rule_id, **span} for span in _find_token_spans(text, left_token)])
+            matched_spans.extend([{"rule_id": rule_id, **span} for span in _find_token_spans(text, right_token)])
+            score_components.append(
+                {
+                    "id": rule_id,
+                    "type": "combination",
+                    "severity": severity,
+                    "score": bonus,
+                    "floor_score": floor_score,
+                    "floor_applied": floor_score > 0,
+                    "left": left_token,
+                    "right": right_token,
+                    "clue": combo_clue,
+                }
+            )
 
     urgent_punctuation = text.count("!") + text.count("！")
     if urgent_punctuation >= 2:
         score += 6
         clues.append("话术存在明显催促语气")
 
+    transaction_signal_count = _count_keyword_hits(text, _TEXT_TRANSACTION_KEYWORDS)
+    hard_signal_count = _count_keyword_hits(text, _TEXT_HARD_SIGNAL_KEYWORDS)
+
+    if len(set(clues)) >= 4:
+        score += 8
+        clues.append("多个独立风险信号叠加")
+
     education_fee_signal = any("教育缴费" in clue or "冒充学校" in clue for clue in clues)
     hard_high_risk_signal = any(
         marker in clue
         for clue in clues
-        for marker in ["立即转账", "验证码", "公检法", "远程控制", "安全账户"]
-    )
+        for marker in ["立即转账", "验证码", "公检法", "公安局", "检察院", "法院", "远程控制", "安全账户"]
+    ) or hard_signal_count >= 2
+
+    if consultative_context and not hard_high_risk_signal:
+        if transaction_signal_count == 0:
+            score = min(int(score * 0.22), 18)
+            clues.append("检测到咨询/科普语境且无交易动作，已显著降权")
+        elif transaction_signal_count == 1:
+            score = int(score * 0.36)
+            clues.append("检测到咨询/科普语境，已降低误报权重")
+        else:
+            score = int(score * 0.65)
+            clues.append("检测到咨询语境，已进行保守降权")
+
     if education_fee_signal and not hard_high_risk_signal:
         score = min(max(score, 68), 76)
 
-    score = min(score, 95)
-    if score < 20 and not has_media:
+    hard_signal_medium_min_hits = max(2, _safe_int(score_policy.get("hard_signal_medium_min_hits"), 2))
+    hard_signal_high_min_hits = max(hard_signal_medium_min_hits + 1, _safe_int(score_policy.get("hard_signal_high_min_hits"), 3))
+    hard_signal_medium_floor = max(45, _safe_int(score_policy.get("hard_signal_medium_floor"), 52))
+    hard_signal_high_floor = max(hard_signal_medium_floor + 8, _safe_int(score_policy.get("hard_signal_high_floor"), 82))
+
+    if hard_signal_count >= hard_signal_medium_min_hits:
+        score = max(score, hard_signal_medium_floor)
+        matched_rule_ids.append("floor:hard_signal_medium")
+        hard_rule_ids.append("floor:hard_signal_medium")
+        clues.append("命中多个强风险信号，触发保底预警")
+    if hard_signal_count >= hard_signal_high_min_hits and transaction_signal_count >= 1:
+        score = max(score, hard_signal_high_floor)
+        matched_rule_ids.append("floor:hard_signal_high_transaction")
+        hard_rule_ids.append("floor:hard_signal_high_transaction")
+        clues.append("强风险信号叠加交易动作，提升至高危保底分")
+
+    global_role_signal_score_threshold = max(0, min(95, _safe_int(score_policy.get("role_signal_score_threshold"), 24)))
+    global_role_signal_min_hits = max(1, min(8, _safe_int(score_policy.get("role_signal_min_hits"), 1)))
+    global_role_signal_boost_per_hit = max(0, min(8, _safe_int(score_policy.get("role_signal_boost_per_hit"), 2)))
+    global_role_signal_max_boost = max(0, min(24, _safe_int(score_policy.get("role_signal_max_boost"), 6)))
+    global_role_signal_requires_transaction = bool(score_policy.get("role_signal_requires_transaction", False))
+
+    role_signal_score_threshold = max(
+        0,
+        min(
+            95,
+            _safe_int(
+                role_score_policy.get("role_signal_score_threshold"),
+                global_role_signal_score_threshold,
+            ),
+        ),
+    )
+    role_signal_min_hits = max(
+        1,
+        min(8, _safe_int(role_score_policy.get("role_signal_min_hits"), global_role_signal_min_hits)),
+    )
+    role_signal_boost_per_hit = max(
+        0,
+        min(8, _safe_int(role_score_policy.get("role_signal_boost_per_hit"), global_role_signal_boost_per_hit)),
+    )
+    role_signal_max_boost = max(
+        0,
+        min(24, _safe_int(role_score_policy.get("role_signal_max_boost"), global_role_signal_max_boost)),
+    )
+    role_signal_fixed_boost = max(0, min(24, _safe_int(role_score_policy.get("role_signal_boost"), 0)))
+    role_signal_requires_transaction = bool(
+        role_score_policy.get("role_signal_requires_transaction", global_role_signal_requires_transaction)
+    )
+    role_signal_skip_consultative = bool(role_score_policy.get("role_signal_skip_consultative", True))
+
+    if (
+        role_specific_hit_count >= role_signal_min_hits
+        and score >= role_signal_score_threshold
+        and (not role_signal_requires_transaction or transaction_signal_count >= 1)
+        and not (role_signal_skip_consultative and consultative_context and transaction_signal_count == 0)
+    ):
+        if role_signal_fixed_boost > 0:
+            role_signal_boost = role_signal_fixed_boost
+        else:
+            role_signal_boost = min(role_signal_max_boost, role_specific_hit_count * role_signal_boost_per_hit)
+
+        if role_signal_boost > 0:
+            score += role_signal_boost
+            if role_specific_markers:
+                clues.append(f"角色专项类型: {role_specific_markers[0]}")
+            clues.append(f"角色专项命中加分: {normalized_role}(+{role_signal_boost})")
+
+    if len(text) <= 12 and score < 35 and not hard_high_risk_signal and not has_media and not matched_rule_ids:
         return None
 
-    level = _risk_level_from_score(score)
+    score = min(score, 95)
+    if score < 20 and not has_media and not matched_rule_ids:
+        return None
+
+    global_medium_threshold = max(20, min(70, _safe_int(score_policy.get("medium_threshold"), 40)))
+    global_high_threshold = max(global_medium_threshold + 5, min(96, _safe_int(score_policy.get("high_threshold"), 75)))
+    level = _risk_level_from_score(
+        score,
+        low_threshold=global_medium_threshold,
+        high_threshold=global_high_threshold,
+    )
     if level == "high":
         warning_message = "检测到高危诈骗话术，请立即停止转账并核验对方身份。"
     elif level == "medium":
@@ -1364,6 +2379,30 @@ def _build_fast_text_warning(message: str, has_media: bool) -> Optional[dict]:
         "warning_message": warning_message,
         "source": "fast_text_rules",
         "is_preliminary": True,
+        "user_role": normalized_role,
+        "consultative_context": consultative_context,
+        "transaction_signal_count": transaction_signal_count,
+        "hard_signal_count": hard_signal_count,
+        "signal_severity": "hard" if hard_rule_ids and (level == "high" or hard_signal_count >= 2) else "soft",
+        "matched_rule_ids": list(dict.fromkeys(matched_rule_ids)),
+        "hard_rule_ids": list(dict.fromkeys(hard_rule_ids)),
+        "soft_rule_ids": list(dict.fromkeys(soft_rule_ids)),
+        "matched_spans": _dedupe_spans(matched_spans)[:12],
+        "source_priority": source_priority,
+        "popup_severity": "blocking" if level == "high" else "soft" if level == "medium" else "none",
+        "voice_warning_required": level == "high",
+        "guardian_intervention_required": level == "high" and bool(hard_rule_ids),
+        "score_breakdown": {
+            "source": "fast_text_rules",
+            "components": score_components[:12],
+            "hard_rule_count": len(set(hard_rule_ids)),
+            "soft_rule_count": len(set(soft_rule_ids)),
+            "transaction_signal_count": transaction_signal_count,
+            "hard_signal_count": hard_signal_count,
+            "medium_threshold": global_medium_threshold,
+            "high_threshold": global_high_threshold,
+            "floor_score": score,
+        },
     }
 
 
@@ -1679,6 +2718,7 @@ def _serialize_contacts(contacts) -> list[dict]:
         {
             "name": contact.name,
             "phone": contact.phone,
+            "email": contact.email or "",
             "relationship": getattr(contact, "relationship", ""),
             "is_guardian": bool(contact.is_guardian),
         }
@@ -1700,6 +2740,16 @@ def _build_detection_payload(result: dict) -> dict:
         "risk_level": result.get("risk_level", "low"),
         "scam_type": result.get("scam_type", ""),
         "risk_clues": result.get("risk_clues", []),
+        "matched_rule_ids": result.get("matched_rule_ids", []),
+        "hard_rule_ids": result.get("hard_rule_ids", []),
+        "soft_rule_ids": result.get("soft_rule_ids", []),
+        "matched_spans": result.get("matched_spans", []),
+        "source_priority": result.get("source_priority", []),
+        "popup_severity": result.get("popup_severity"),
+        "critical_guardrail_triggered": bool(result.get("critical_guardrail_triggered", False)),
+        "voice_warning_required": bool(result.get("voice_warning_required", False)),
+        "guardian_intervention_required": bool(result.get("guardian_intervention_required", False)),
+        "score_breakdown": result.get("score_breakdown"),
         "warning_message": result.get("warning_message", ""),
         "guardian_alert": result.get("guardian_alert", False),
         "alert_reason": result.get("alert_reason", ""),
@@ -1752,6 +2802,7 @@ def _get_ws_user(token: Optional[str]) -> Optional[User]:
 @router.post("/detect")
 async def detect_fraud(
     message: str = Form(...),
+    language: Optional[str] = Form(None),
     client_request_started_at_ms: Optional[float] = Form(None),
     audio_file: Optional[UploadFile] = File(None),
     image_file: Optional[UploadFile] = File(None),
@@ -1775,6 +2826,7 @@ async def detect_fraud(
     )
     monitor_model_name = "fraud_detection_single_pass" if use_single_pass else "fraud_detection_graph"
     performance_timing: dict[str, Any] = {}
+    requested_language = normalize_output_language(language or getattr(current_user, "language", "zh-CN"))
 
     try:
         audio_path, image_path, video_path, upload_timing = _save_uploads_with_timing(
@@ -1787,6 +2839,7 @@ async def detect_fraud(
 
         contacts = db.query(Contact).filter(Contact.user_id == current_user.id).all()
         guardian_contact = next((contact for contact in contacts if contact.is_guardian), None)
+        guardian_email_receiver = resolve_guardian_email_receiver(contacts)
         memory_context = _build_user_memory_context(db, current_user, message)
 
         image_ai_warning = None
@@ -1866,8 +2919,10 @@ async def detect_fraud(
                 single_pass_message,
                 has_media=has_media,
                 image_ai_warning=image_ai_warning,
+                user_role=normalize_user_role(current_user.user_role),
             )
             fallback_warning = _merge_warning_with_media_warnings(fallback_warning, media_warnings)
+            fallback_warning = localize_early_warning(fallback_warning, requested_language, has_media=has_media)
             result, _ = await _run_single_pass_detection_stream(
                 task_id=f"sync_{uuid.uuid4().hex[:12]}",
                 message=single_pass_message,
@@ -1875,6 +2930,7 @@ async def detect_fraud(
                 early_warning=fallback_warning,
                 has_media=has_media,
                 model_mode=model_mode,
+                language=requested_language,
                 memory_context=memory_context,
                 dynamic_thresholds=memory_context.get("dynamic_thresholds"),
             )
@@ -1886,7 +2942,7 @@ async def detect_fraud(
             workflow_options = {
                 "prefer_ai_rate_early_warning": bool(image_path),
                 "image_ai_ocr_skip_threshold": 0.74,
-                "language": str(getattr(current_user, "language", "zh-CN") or "zh-CN"),
+                "language": requested_language,
                 "age_group": str(getattr(current_user, "age_group", "unknown") or "unknown"),
                 "gender": str(getattr(current_user, "gender", "unknown") or "unknown"),
                 "occupation": str(getattr(current_user, "occupation", "other") or "other"),
@@ -1914,7 +2970,7 @@ async def detect_fraud(
             }
 
         email_notification = await send_high_risk_email_if_needed(
-            receiver=current_user.email,
+            receiver=guardian_email_receiver,
             result=result,
             notify_enabled=current_user.notify_enabled,
             notify_high_risk=current_user.notify_high_risk,
@@ -1968,6 +3024,7 @@ async def detect_fraud(
 @router.post("/detect-async")
 async def detect_fraud_async(
     message: str = Form(...),
+    language: Optional[str] = Form(None),
     client_request_started_at_ms: Optional[float] = Form(None),
     audio_file: Optional[UploadFile] = File(None),
     image_file: Optional[UploadFile] = File(None),
@@ -1989,6 +3046,7 @@ async def detect_fraud_async(
         has_image=bool(image_file),
     )
     performance_timing: dict[str, Any] = {}
+    requested_language = normalize_output_language(language or getattr(current_user, "language", "zh-CN"))
 
     try:
         input_summary = message[:50] if message else "fraud-detection"
@@ -2004,7 +3062,7 @@ async def detect_fraud_async(
         user_id = current_user.id
         user_role = normalize_user_role(current_user.user_role)
         fallback_guardian_name = current_user.guardian_name
-        receiver_email = current_user.email
+        receiver_email = ""
         notify_enabled = current_user.notify_enabled
         notify_high_risk = current_user.notify_high_risk
         notify_guardian_alert = current_user.notify_guardian_alert
@@ -2037,7 +3095,9 @@ async def detect_fraud_async(
             message,
             has_media=has_media,
             image_ai_warning=image_ai_warning,
+            user_role=user_role,
         )
+        early_warning = localize_early_warning(early_warning, requested_language, has_media=has_media)
         performance_timing["early_warning_total_ms"] = _elapsed_ms(early_warning_started_at)
 
         workflow_options = {
@@ -2047,7 +3107,7 @@ async def detect_fraud_async(
             "image_ai_probability": (image_ai_warning or {}).get("image_ai_probability"),
             "image_ai_risk_level": (image_ai_warning or {}).get("risk_level"),
             "image_ai_ocr_skip_threshold": (image_ai_warning or {}).get("image_ai_ocr_skip_threshold", 0.74),
-            "language": str(getattr(current_user, "language", "zh-CN") or "zh-CN"),
+            "language": requested_language,
             "age_group": str(getattr(current_user, "age_group", "unknown") or "unknown"),
             "gender": str(getattr(current_user, "gender", "unknown") or "unknown"),
             "occupation": str(getattr(current_user, "occupation", "other") or "other"),
@@ -2057,6 +3117,7 @@ async def detect_fraud_async(
 
         contacts = db.query(Contact).filter(Contact.user_id == current_user.id).all()
         guardian_contact = next((contact for contact in contacts if contact.is_guardian), None)
+        receiver_email = resolve_guardian_email_receiver(contacts)
         serialized_contacts = _serialize_contacts(contacts)
 
         async def process_and_cleanup():
@@ -2137,8 +3198,14 @@ async def detect_fraud_async(
                         single_pass_message,
                         has_media=has_media,
                         image_ai_warning=image_ai_warning,
+                        user_role=user_role,
                     )
                     llm_early_warning = _merge_warning_with_media_warnings(llm_early_warning, media_warnings)
+                    llm_early_warning = localize_early_warning(
+                        llm_early_warning,
+                        requested_language,
+                        has_media=has_media,
+                    )
                     result, total_chunks = await _run_single_pass_detection_stream(
                         task_id=task.task_id,
                         message=single_pass_message,
@@ -2146,6 +3213,7 @@ async def detect_fraud_async(
                         early_warning=llm_early_warning,
                         has_media=has_media,
                         model_mode=model_mode,
+                        language=requested_language,
                         memory_context=memory_context,
                         dynamic_thresholds=memory_context.get("dynamic_thresholds"),
                     )

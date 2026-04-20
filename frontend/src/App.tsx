@@ -21,18 +21,20 @@ function LanguageSwitcher() {
   const { language, setLanguage } = useI18n();
 
   return (
-    <div className="card-dark fixed right-4 top-4 z-[1100] rounded-lg p-1 backdrop-blur">
+    <div className="language-switcher fixed right-4 top-4 z-[1100] rounded-lg p-1 backdrop-blur">
       <div className="flex gap-1">
         <Button
           size="small"
-          type={language === 'zh-CN' ? 'primary' : 'default'}
+          type="text"
+          className={language === 'zh-CN' ? 'language-toggle-button language-toggle-active' : 'language-toggle-button'}
           onClick={() => setLanguage('zh-CN')}
         >
-          中文
+          {'\u4e2d\u6587'}
         </Button>
         <Button
           size="small"
-          type={language === 'en-US' ? 'primary' : 'default'}
+          type="text"
+          className={language === 'en-US' ? 'language-toggle-button language-toggle-active' : 'language-toggle-button'}
           onClick={() => setLanguage('en-US')}
         >
           EN
@@ -82,8 +84,12 @@ function App() {
         theme={{
           algorithm: isDark ? darkAlgorithm : defaultAlgorithm,
           token: {
-            colorPrimary: '#6366f1',
-            colorInfo: '#6366f1',
+            colorPrimary: isDark ? '#f8fafc' : '#111827',
+            colorPrimaryHover: isDark ? '#e2e8f0' : '#1f2937',
+            colorPrimaryActive: isDark ? '#cbd5e1' : '#0f172a',
+            colorInfo: '#2563eb',
+            colorTextLightSolid: isDark ? '#0f172a' : '#ffffff',
+            borderRadius: 8,
           },
         }}
       >

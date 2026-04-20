@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 from src.core.interfaces import LLMClient
 from src.core.models import GlobalState
-from src.core.utils import load_node_config
+from src.core.utils import build_role_prompt_guidance, load_node_config, normalize_user_role
 
 
 class ReportGenerator:
@@ -117,6 +117,11 @@ Requirements:
 - 风险线索:
 {context["risk_clues"]}
 
+## 用户角色与角色化提示
+- 用户角色: {context["user_role"]}
+- 角色化提示词:
+{context["role_prompt_guidance"]}
+
 ## 干预措施
 - 警告信息: {context["warning_message"]}
 - 建议操作:
@@ -145,6 +150,11 @@ Requirements:
 - Risk Clues:
 {context["risk_clues"]}
 
+## User Role and Role Guidance
+- User Role: {context["user_role"]}
+- Role-specific Guidance:
+{context["role_prompt_guidance"]}
+
 ## Intervention
 - Warning Message: {context["warning_message"]}
 - Recommended Actions:
@@ -160,6 +170,9 @@ Return a complete Markdown report and ensure the whole report is written only in
 
     def _build_context(self, state: GlobalState, language: str) -> Dict[str, Any]:
         input_text = state.get_combined_text()[:500]
+        role_value = getattr(state.user_context.user_role, "value", state.user_context.user_role)
+        user_role = normalize_user_role(str(role_value or "general"))
+        role_prompt_guidance = build_role_prompt_guidance(user_role, language)
 
         perception_parts = []
         for result in state.perception_results:
@@ -209,6 +222,8 @@ Return a complete Markdown report and ensure the whole report is written only in
 
         return {
             "input_text": input_text,
+            "user_role": user_role,
+            "role_prompt_guidance": role_prompt_guidance,
             "perception_summary": perception_summary,
             "risk_score": risk_score,
             "risk_level": risk_level,

@@ -86,7 +86,7 @@ async def send_high_risk_email_if_needed(
             "notified": False,
             "channel": "email",
             "status": "missing_receiver",
-            "failure_reason": "No valid receiver email is configured in user settings.",
+            "failure_reason": "No valid guardian email is configured in contacts.",
         }
 
     try:

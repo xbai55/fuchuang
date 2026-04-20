@@ -114,13 +114,14 @@ async def agent_chat(
     try:
         agent = CozeAgent(
             user_id=current_user.id,
-            user_role=current_user.user_role
+            user_role=current_user.user_role,
+            language=request.language or getattr(current_user, "language", "zh-CN"),
         )
 
         response = await agent.chat(
             message=request.message,
             conversation_id=request.conversation_id,
-            context=request.context
+            context=request.context,
         )
 
         response_payload = _normalize_agent_payload(
@@ -192,6 +193,7 @@ async def agent_chat_async(
         request_message = request.message
         request_context = request.context
         request_conversation_id = request.conversation_id
+        request_language = request.language or getattr(current_user, "language", "zh-CN")
 
         async def process_agent_chat() -> None:
             db_session = SessionLocal()
@@ -201,7 +203,7 @@ async def agent_chat_async(
 
             try:
                 task_manager.update_task_progress(task.task_id, 20)
-                agent = CozeAgent(user_id=user_id, user_role=user_role)
+                agent = CozeAgent(user_id=user_id, user_role=user_role, language=request_language)
                 task_manager.publish_task_event(task.task_id, {"event": "agent_stream_started"})
                 task_manager.update_task_progress(task.task_id, 35)
 

@@ -86,6 +86,10 @@ from api import auth, contacts, fraud_detection, agent_chat, settings, monitorin
 # 数据库初始化
 from database import init_db
 from src.brain.rag.auto_build import ensure_knowledge_base
+from src.brain.rag.external_case_sync import (
+    is_external_case_sync_enabled,
+    run_external_case_sync_loop,
+)
 from model_warmup import warmup_models
 
 # 异常处理器
@@ -124,6 +128,9 @@ def _start_warmup_daemon() -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    external_sync_stop_event = asyncio.Event()
+    external_sync_task = None
+
     # 启动时初始化数据库
     init_db()
 
@@ -169,7 +176,35 @@ async def lifespan(app: FastAPI):
     print("✅ Agent 聊天服务已加载")
     print("✅ 异步任务管理器已启动")
     print("✅ 统一响应格式已启用")
+
+    try:
+        if is_external_case_sync_enabled():
+            external_sync_task = asyncio.create_task(
+                run_external_case_sync_loop(external_sync_stop_event),
+                name="external-case-sync",
+            )
+            app.state.external_case_sync_task = external_sync_task
+            app.state.external_case_sync_stop_event = external_sync_stop_event
+            print("✅ 外部诈骗案例自动同步任务已启动")
+        else:
+            print("ℹ️ 外部诈骗案例自动同步未启用（EXTERNAL_CASE_SYNC_ENABLED=false）")
+    except Exception as e:
+        print(f"⚠️ 外部诈骗案例自动同步启动失败: {e}")
+
     yield
+
+    if external_sync_task:
+        external_sync_stop_event.set()
+        try:
+            await asyncio.wait_for(external_sync_task, timeout=3.0)
+        except asyncio.TimeoutError:
+            external_sync_task.cancel()
+            try:
+                await external_sync_task
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"⚠️ 外部诈骗案例自动同步停止异常: {e}")
 
     # 关闭时的清理工作（如果需要）
     print("👋 服务正在关闭...")

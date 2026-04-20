@@ -39,6 +39,7 @@ class EmergencyContact(BaseModel):
 
     name: str = Field("", description="Contact name")
     phone: str = Field("", description="Contact phone number")
+    email: str = Field("", description="Contact email address")
     relationship: str = Field("", description="Relationship to the user")
     is_guardian: bool = Field(False, description="Whether this contact is the primary guardian")
 

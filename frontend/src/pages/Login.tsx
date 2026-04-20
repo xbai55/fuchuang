@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
-import { LockOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons';
+import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { authAPI } from '../services/api';
-import { storage } from '../utils/storage';
 import { useI18n } from '../i18n';
+import { storage } from '../utils/storage';
+import { APP_NAME, APP_NAME_EN, APP_TAGLINE, APP_TAGLINE_EN, BRAND_LOGO_SRC } from '../utils/brand';
 import type { LoginRequest } from '../types';
 
 const { Paragraph, Text, Title } = Typography;
@@ -25,6 +26,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const t = (zh: string, en: string) => (isZh ? zh : en);
+  const brandName = t(APP_NAME, APP_NAME_EN);
+  const brandTagline = t(APP_TAGLINE, APP_TAGLINE_EN);
 
   const onFinish = async (values: LoginRequest) => {
     setLoading(true);
@@ -48,32 +51,27 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-darker">
-      <div className="hidden lg:flex flex-1 flex-col justify-center items-center p-12 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-20 h-72 w-72 rounded-full bg-primary blur-3xl" />
-          <div className="absolute bottom-24 right-16 h-80 w-80 rounded-full bg-secondary blur-3xl" />
-        </div>
-
-        <div className="relative z-10 max-w-lg text-center">
-          <SafetyOutlined className="text-7xl text-primary" />
-          <Title level={1} className="!mt-8 !mb-4 !text-white">
-            {t('反诈预警', 'Anti-fraud Alert')}
+    <div className="auth-shell flex">
+      <div className="auth-brand-panel hidden flex-1 flex-col justify-center px-16 py-12 lg:flex">
+        <div className="max-w-xl">
+          <div className="brand-logo h-20 w-20 rounded-lg">
+            <img src={BRAND_LOGO_SRC} alt={brandName} />
+          </div>
+          <div className="page-kicker mt-10">Tianshu Mingyu</div>
+          <Title level={1} className="!mb-5 !mt-3 !text-6xl !font-semibold !leading-tight !text-white">
+            {brandName}
           </Title>
-          <Paragraph className="!text-lg !text-gray-300">
-            {t(
-              '在一个界面中分析可疑聊天、图片、音频和视频内容。',
-              'Analyze suspicious chats, images, audio, and videos in one place.',
-            )}
+          <Paragraph className="!max-w-md !text-lg !leading-8 !text-gray-300">
+            {brandTagline}
           </Paragraph>
-          <div className="mt-8 space-y-3 text-left">
-            <div className="rounded-xl border border-gray-800 bg-dark-lighter p-4 text-gray-300">
+          <div className="auth-feature-list mt-12 max-w-md text-left">
+            <div className="auth-feature-item py-4">
               {t('实时诈骗风险评分', 'Real-time fraud risk scoring')}
             </div>
-            <div className="rounded-xl border border-gray-800 bg-dark-lighter p-4 text-gray-300">
-              {t('紧急联系人联动机制', 'Emergency contact escalation')}
+            <div className="auth-feature-item py-4">
+              {t('可信联系人邮件提醒', 'Trusted contact email alerts')}
             </div>
-            <div className="rounded-xl border border-gray-800 bg-dark-lighter p-4 text-gray-300">
+            <div className="auth-feature-item py-4">
               {t('多模态内容检测', 'Multimodal content detection')}
             </div>
           </div>
@@ -81,15 +79,19 @@ export default function Login() {
       </div>
 
       <div className="flex flex-1 items-center justify-center p-6">
-        <Card className="w-full max-w-md card-dark !border-gray-700" variant="borderless">
+        <Card className="auth-card w-full max-w-md" variant="borderless">
           <div className="mb-8 text-center">
             <div className="mb-4 lg:hidden">
-              <SafetyOutlined className="text-5xl text-primary" />
+              <div className="brand-logo mx-auto h-14 w-14 rounded-lg">
+                <img src={BRAND_LOGO_SRC} alt={brandName} />
+              </div>
             </div>
             <Title level={2} className="!mb-2 !text-white">
               {t('登录', 'Sign In')}
             </Title>
-            <Text className="!text-gray-400">{t('使用你的账号继续。', 'Continue with your account.')}</Text>
+            <Text className="!text-gray-400">
+              {t('继续访问天枢明御。', 'Continue to Tianshu Mingyu.')}
+            </Text>
           </div>
 
           <Form<LoginRequest> layout="vertical" size="large" onFinish={onFinish} autoComplete="off">

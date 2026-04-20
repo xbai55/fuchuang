@@ -7,11 +7,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: '#6366f1',
-        secondary: '#8b5cf6',
-        dark: '#1a1a2e',
-        darker: '#16162a',
-        'dark-lighter': '#1e1e38',
+        primary: '#111827',
+        secondary: '#2563eb',
+        dark: '#111827',
+        darker: '#0b0f17',
+        'dark-lighter': '#111827',
       },
     },
   },

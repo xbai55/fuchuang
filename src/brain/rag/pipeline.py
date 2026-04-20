@@ -323,6 +323,7 @@ class KnowledgePipeline:
             store = ChromaVectorStore(
                 collection_name="fraud_cases",
                 persist_directory=str(self.config.paths.index_dir / "chromadb"),
+                embedding_model=self.config.index.dense_model,
             )
 
             documents = [
@@ -345,12 +346,14 @@ class KnowledgePipeline:
             return {
                 "chromadb_status": "success",
                 "chromadb_count": len(documents),
+                "embedding_model": self.config.index.dense_model,
             }
 
         except Exception as e:
             return {
                 "chromadb_status": "failed",
                 "chromadb_error": str(e),
+                "embedding_model": self.config.index.dense_model,
             }
 
     async def build_all(self, backend: Optional[str] = None) -> dict:

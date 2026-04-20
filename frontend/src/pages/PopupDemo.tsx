@@ -4,6 +4,7 @@ import { Button, Layout, Space, Typography, message } from 'antd';
 import { Link } from 'react-router-dom';
 import FraudAlertModal from '../components/FraudAlertModal';
 import { buildFraudAlertPayload, shouldShowFraudAlert } from '../utils/fraudPopup';
+import { openOfficialPoliceHelpPage } from '../utils/emergencyActions';
 import type { FraudAlertPayload, FraudDetectionResponse } from '../types';
 
 const { Content } = Layout;
@@ -17,45 +18,49 @@ const demoResponses: Array<{
 }> = [
   {
     key: 'low',
-    label: '低风险示例',
-    description: '正常提醒型弹窗，保留轻量提示和安全建议。',
+    label: '低风险样例',
+    description: '保留谨慎提示，帮助用户在没有强风险信号时继续核验信息来源。',
     response: {
       risk_score: 26,
       risk_level: 'low',
-      scam_type: '普通社交对话',
-      warning_message:
-        '当前内容未出现明显诈骗特征，但仍建议不要随意泄露验证码、银行卡号或身份证信息。',
-      final_report: '# 低风险报告\n\n当前对话未触发高危规则，可继续观察。',
+      scam_type: '信息核验中',
+      warning_message: '当前未发现明显诈骗脚本，但仍建议不要透露验证码、银行卡号和身份证信息。',
+      final_report: '# 低风险报告\n\n当前未发现明显高危诈骗信号，建议继续通过官方渠道核验对方身份。',
       guardian_alert: false,
     },
   },
   {
     key: 'medium',
-    label: '中风险示例',
-    description: '疑似诈骗预警，突出暂停操作和身份复核。',
+    label: '中风险样例',
+    description: '展示明显异常的提示层级，强调暂停操作和二次核验。',
     response: {
       risk_score: 68,
       risk_level: 'medium',
-      scam_type: '兼职刷单诈骗',
+      scam_type: '冒充客服退款',
       warning_message:
-        '检测到**兼职返利**与**先垫付后返现**等典型话术。\n\n- 不要继续转账\n- 不要下载对方提供的 App\n- 尽快核实平台官方身份',
-      final_report: '# 中风险报告\n\n建议立即复核对方身份，并保留聊天证据。',
+        '检测到“退款补偿”“下载会议软件”“屏幕共享”等组合话术。\n\n- 暂停当前操作\n- 不要继续输入验证码\n- 通过官方热线核验身份',
+      final_report:
+        '# 中风险报告\n\n对话中出现退款、远程协助和验证码要求，存在明显诱导风险，建议立即切换到官方渠道复核。',
       guardian_alert: false,
+      soft_rule_ids: ['refund-flow', 'remote-control-request'],
     },
   },
   {
     key: 'high',
-    label: '高风险示例',
-    description: '强提醒风格，附带监护人联动按钮和完整报告入口。',
+    label: '高风险样例',
+    description: '强提醒风格，附带可信联系人联动按钮和完整报告入口。',
     response: {
       risk_score: 92,
       risk_level: 'high',
-      scam_type: '冒充客服退款诈骗',
+      scam_type: '冒充公检法',
       warning_message:
-        '系统识别到**冒充客服退款**与**索要验证码**的高危组合，请立即停止操作。\n\n1. 不要提供短信验证码\n2. 不要点击陌生退款链接\n3. 立即联系官方客服核验',
+        '检测到“安全账户”“立即转账”“案件保密”等高危组合，疑似冒充公检法诈骗。\n\n1. 立即停止转账\n2. 不要共享屏幕或验证码\n3. 联系可信联系人或拨打 96110',
       final_report:
-        '# 高风险报告\n\n该内容与典型冒充电商客服诈骗高度相似，存在资金损失风险，建议立刻中断联系并通知监护人。',
+        '# 高风险报告\n\n该内容与典型冒充公检法诈骗高度相似，存在明显资金损失风险，建议立刻中断联系并同步可信联系人。',
       guardian_alert: true,
+      hard_rule_ids: ['safe-account-transfer'],
+      popup_severity: 'blocking',
+      critical_guardrail_triggered: true,
     },
   },
 ];
@@ -79,7 +84,7 @@ export default function PopupDemo() {
   };
 
   return (
-    <Layout className="min-h-screen bg-darker">
+    <Layout className="app-shell min-h-screen">
       <Content className="px-6 py-10">
         <div className="mx-auto max-w-6xl space-y-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -87,24 +92,24 @@ export default function PopupDemo() {
               <Space size="middle" wrap>
                 <span className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1 text-sm text-indigo-300">
                   <ThunderboltOutlined />
-                  独立弹窗演示页
+                  预警弹窗演示
                 </span>
                 <span className="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-[#1b1d34] px-4 py-1 text-sm text-slate-300">
                   <ApiOutlined />
-                  未接入正式检测链路
+                  与后端返回结构对齐
                 </span>
               </Space>
               <Title level={1} style={{ color: '#ffffff', margin: 0 }}>
-                反诈预警弹窗测试
+                风险弹窗与联动反馈
               </Title>
               <Paragraph style={{ color: '#94a3b8', maxWidth: 760, marginBottom: 0 }}>
-                这个页面只负责演示 UI 效果和未来接入方式。当前用三组模拟的
-                `FraudDetectionResponse` 生成弹窗，不会影响现有聊天主流程。
+                这里用静态样例复刻 `FraudDetectionResponse` 到弹窗展示层的映射，方便校验预警层级、
+                重点联系人联动、完整报告入口和前端交互细节。
               </Paragraph>
             </div>
 
             <Link to="/">
-              <Button icon={<ArrowLeftOutlined />}>返回主页面</Button>
+              <Button icon={<ArrowLeftOutlined />}>返回主界面</Button>
             </Link>
           </div>
 
@@ -122,11 +127,11 @@ export default function PopupDemo() {
                     {item.description}
                   </Paragraph>
                   <div className="mb-4 rounded-xl border border-gray-700 bg-[#18182d] p-3 text-sm text-slate-300">
-                    风险分数：{item.response.risk_score}
+                    风险评分：{item.response.risk_score}
                     <br />
                     诈骗类型：{item.response.scam_type}
                     <br />
-                    是否建议弹窗：{shouldPopup ? '是' : '否'}
+                    是否触发弹窗：{shouldPopup ? '是' : '否'}
                   </div>
                   <Button
                     type="primary"
@@ -134,7 +139,7 @@ export default function PopupDemo() {
                     className="btn-primary w-full"
                     onClick={() => openDemo(item.response)}
                   >
-                    打开示例弹窗
+                    打开弹窗预览
                   </Button>
                 </div>
               );
@@ -144,11 +149,11 @@ export default function PopupDemo() {
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="card-dark p-5">
               <Title level={4} style={{ color: '#ffffff', marginTop: 0 }}>
-                预留接口
+                接入示例
               </Title>
               <Paragraph style={{ color: '#94a3b8' }}>
-                后续正式接入时，直接把 `fraudAPI.detect()` 的返回结果传给
-                `buildFraudAlertPayload()`，再用 `shouldShowFraudAlert()` 控制是否弹出即可。
+                真实页面里直接在 `fraudAPI.detect()` 结果返回后调用 `buildFraudAlertPayload()`，
+                再配合 `shouldShowFraudAlert()` 决定是否弹出。
               </Paragraph>
               <pre className="overflow-x-auto rounded-2xl border border-gray-700 bg-[#121425] p-4 text-sm text-slate-300">
                 <code>{integrationExample}</code>
@@ -157,22 +162,22 @@ export default function PopupDemo() {
 
             <div className="card-dark p-5">
               <Title level={4} style={{ color: '#ffffff', marginTop: 0 }}>
-                演示说明
+                交互说明
               </Title>
               <div className="space-y-3 text-sm text-slate-300">
                 <div className="rounded-xl border border-gray-700 bg-[#18182d] p-3">
-                  低风险样例默认不会强制要求弹窗，但这里保留了展示入口，方便比赛现场演示不同层级样式。
+                  低风险样例保留轻量提示，帮助用户继续做信息核验。
                 </div>
                 <div className="rounded-xl border border-gray-700 bg-[#18182d] p-3">
-                  中高风险样例会强调"暂停操作""核验身份""联系监护人"等动作。
+                  中高风险样例会强调“暂停操作”“核验身份”“可信联系人联动”等动作。
                 </div>
                 <div className="rounded-xl border border-gray-700 bg-[#18182d] p-3">
-                  按钮回调目前只是测试占位，后续可以接报告页、监护人通知和上报接口。
+                  按钮回调当前使用演示消息，后续可以直接接入报告页、通知流程和处置接口。
                 </div>
               </div>
               <div className="mt-4">
                 <Text style={{ color: '#64748b' }}>
-                  访问地址：`/popup-demo`
+                  当前页面路径：`/popup-demo`
                 </Text>
               </div>
             </div>
@@ -188,10 +193,14 @@ export default function PopupDemo() {
           message.success(`已确认：${alert.title}`);
         }}
         onViewReport={(alert) => {
-          message.info(`测试占位：查看报告 -> ${alert.scamType}`);
+          message.info(`查看完整报告：${alert.scamType}`);
+        }}
+        onSeekHelp={() => {
+          openOfficialPoliceHelpPage();
+          message.warning('\u5df2\u6253\u5f00\u516c\u5b89\u90e8\u5b98\u65b9\u7f51\u7edc\u8fdd\u6cd5\u72af\u7f6a\u4e3e\u62a5\u9875\u9762\uff0c\u7d27\u6025\u60c5\u51b5\u8bf7\u76f4\u63a5\u62e8\u6253 110\u3002');
         }}
         onContactGuardian={(alert) => {
-          message.warning(`测试占位：监护人联动 -> ${alert.scamType}`);
+          message.warning(`测试占位：重点联系人联动 -> ${alert.scamType}`);
         }}
       />
     </Layout>

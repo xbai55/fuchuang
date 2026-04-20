@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src.brain.rag.config import RAGConfig, load_rag_config
+from src.brain.rag.config import load_rag_config
 from src.brain.rag.indexer import SimilarityIndex
 from src.brain.rag.models import KnowledgeChunk, KnowledgeDocument
-from src.brain.rag.pipeline import KnowledgePipeline, chunk_text, sha1_text, read_jsonl, write_jsonl
+from src.brain.rag.pipeline import chunk_text, sha1_text, read_jsonl
 from src.brain.rag.auto_build import get_rag_config_path
 
 _HOT_RELOAD_LOCK = threading.Lock()
@@ -77,12 +77,93 @@ def _append_chunks_to_jsonl(chunks_path: Path, new_chunks: list[KnowledgeChunk])
             fh.write(json.dumps(chunk.to_dict(), ensure_ascii=False) + "\n")
 
 
-def _rebuild_tfidf(chunks_path: Path, index_dir: Path, dense_model: str) -> SimilarityIndex:
+def _run_coro_sync(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result_holder: dict[str, Any] = {}
+    error_holder: dict[str, BaseException] = {}
+
+    def _worker() -> None:
+        try:
+            result_holder["result"] = asyncio.run(coro)
+        except BaseException as exc:
+            error_holder["error"] = exc
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    thread.join()
+
+    if "error" in error_holder:
+        raise error_holder["error"]
+    return result_holder.get("result")
+
+
+def _build_chromadb_index(
+    chunks: list[KnowledgeChunk],
+    index_dir: Path,
+    dense_model: str,
+) -> dict[str, Any]:
+    try:
+        from src.brain.rag.vector_store import ChromaVectorStore, VectorDocument
+
+        store = ChromaVectorStore(
+            collection_name="fraud_cases",
+            persist_directory=str(index_dir / "chromadb"),
+            embedding_model=dense_model,
+        )
+        documents = [
+            VectorDocument(
+                id=chunk.chunk_id,
+                content=chunk.text,
+                metadata={
+                    "title": chunk.title,
+                    "category": chunk.category,
+                    "subtype": chunk.subtype,
+                    "source": chunk.source_site,
+                    "tags": chunk.tags,
+                },
+            )
+            for chunk in chunks
+        ]
+        _run_coro_sync(store.add_documents(documents))
+        return {
+            "chromadb_status": "success",
+            "chromadb_count": len(documents),
+            "chromadb_dir": str(index_dir / "chromadb"),
+            "embedding_model": dense_model,
+        }
+    except Exception as exc:
+        return {
+            "chromadb_status": "failed",
+            "chromadb_error": str(exc),
+            "chromadb_dir": str(index_dir / "chromadb"),
+            "embedding_model": dense_model,
+        }
+
+
+def _rebuild_index(
+    chunks_path: Path,
+    index_dir: Path,
+    backend: str,
+    dense_model: str,
+) -> tuple[SimilarityIndex, dict[str, Any]]:
     rows = read_jsonl(chunks_path)
     all_chunks = [KnowledgeChunk.from_dict(r) for r in rows]
-    index = SimilarityIndex.build(all_chunks, backend="tfidf", dense_model=dense_model)
+    index_backend = backend if backend != "hybrid" else "tfidf"
+    index = SimilarityIndex.build(all_chunks, backend=index_backend, dense_model=dense_model)
     index.save(index_dir)
-    return index
+
+    stats: dict[str, Any] = {
+        "backend": backend,
+        "index_backend": index.backend,
+        "index_dir": str(index_dir),
+    }
+    if backend in ("hybrid", "sentence-transformer"):
+        stats.update(_build_chromadb_index(all_chunks, index_dir, dense_model))
+    return index, stats
 
 
 def _update_raw_documents(raw_path: Path, documents: list[KnowledgeDocument]) -> None:
@@ -139,19 +220,22 @@ def ingest_documents(
         _append_chunks_to_jsonl(config.paths.chunks, deduped)
         _update_raw_documents(config.paths.raw_documents, documents)
 
-        index = _rebuild_tfidf(
+        index, index_stats = _rebuild_index(
             config.paths.chunks,
             config.paths.index_dir,
+            config.index.backend,
             config.index.dense_model,
         )
 
         # 更新 manifest
         manifest_path = config.paths.index_dir / "manifest.json"
         manifest = {
-            "backend": "tfidf",
-            "model_name": None,
+            "backend": config.index.backend,
+            "index_backend": index.backend,
+            "model_name": index.model_name,
             "chunk_count": len(index.chunks),
             "last_hot_reload": _iso_now(),
+            **index_stats,
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -159,6 +243,7 @@ def ingest_documents(
             "added_chunks": len(deduped),
             "skipped_chunks": skipped,
             "total_chunks": len(index.chunks),
+            **index_stats,
             "status": "ok",
         }
 

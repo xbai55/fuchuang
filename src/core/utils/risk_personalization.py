@@ -348,6 +348,32 @@ def format_combined_profile_text(
     )
 
 
+def build_role_prompt_guidance(user_role: str, language: str = "zh-CN") -> str:
+    """Build compact role-specific prompt guidance for downstream LLM calls."""
+    normalized_role = normalize_user_role(user_role)
+    profile = get_role_profile(normalized_role)
+    tone = profile.get("tone", "clear and practical")
+    focus = profile.get("focus", "common fraud scenarios")
+    education = profile.get("education", "verify identity before any sensitive action")
+
+    if str(language or "").strip().lower().startswith("en"):
+        return (
+            f"Role={normalized_role}. Use a '{tone}' communication style. "
+            f"Prioritize risks around: {focus}. "
+            f"Core user reminder: {education}. "
+            "Provide direct action steps first; treat money transfer, OTP requests, remote control, "
+            "and off-platform account operations as escalation signals."
+        )
+
+    return (
+        f"Role={normalized_role}. Use a '{tone}' communication style. "
+        f"Prioritize risks around: {focus}. "
+        f"Core user reminder: {education}. "
+        "Output concrete anti-fraud steps first, then concise reasoning. "
+        "When transfer, OTP, remote-control, or account handover signals appear, escalate decisively."
+    )
+
+
 def _clamp_thresholds(low_threshold: int, high_threshold: int) -> Tuple[int, int]:
     low = max(MIN_LOW_THRESHOLD, min(MAX_LOW_THRESHOLD, low_threshold))
     high = max(MIN_HIGH_THRESHOLD, min(MAX_HIGH_THRESHOLD, high_threshold))

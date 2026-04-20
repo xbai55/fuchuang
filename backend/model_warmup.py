@@ -38,6 +38,27 @@ async def _warmup_llm_client(client: Any, timeout_seconds: float) -> Dict[str, s
         return {"status": "failed", "reason": str(exc)}
 
 
+async def _warmup_fast_rag_bundle(timeout_seconds: float = 8.0) -> Dict[str, Any]:
+    try:
+        from api.fraud_detection import _get_fast_rag_bundle
+
+        bundle = await asyncio.wait_for(_get_fast_rag_bundle(), timeout=timeout_seconds)
+        if not bundle:
+            return {"status": "skipped", "reason": "unavailable"}
+
+        return {
+            "status": "ok",
+            "detail": {
+                "loaded": True,
+                "top_k": int(bundle.get("top_k", 0) or 0),
+            },
+        }
+    except asyncio.TimeoutError:
+        return {"status": "timeout", "reason": f">{timeout_seconds:.1f}s"}
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc)}
+
+
 async def warmup_models() -> Dict[str, Any]:
     """Warm up graph, multimodal processors, and LLM clients."""
     if not _env_bool("MODEL_WARMUP_ENABLED", True):
@@ -70,6 +91,8 @@ async def warmup_models() -> Dict[str, Any]:
         status["steps"]["multimodal"] = {"status": "ok", "detail": multimodal_detail}
     except Exception as exc:
         status["steps"]["multimodal"] = {"status": "failed", "reason": str(exc)}
+
+    status["steps"]["fast_rag"] = await _warmup_fast_rag_bundle()
 
     if _env_bool("LLM_WARMUP_ENABLED", True):
         risk_node = graph_components.get("risk_assessment")

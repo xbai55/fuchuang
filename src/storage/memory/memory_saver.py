@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 # 数据库连接超时时间（秒），每次尝试 15 秒，共尝试 2 次
 DB_CONNECTION_TIMEOUT = 15
 DB_MAX_RETRIES = 2
+POSTGRES_DEPENDENCY_INSTALL_HINT = (
+    'pip install "psycopg[binary,pool]" langgraph-checkpoint-postgres'
+)
 
 
 class MemoryManager:
@@ -43,7 +46,11 @@ class MemoryManager:
     def _connect_with_retry(self, db_url: str) -> Optional[Any]:
         """带重试的数据库连接，每次 15 秒超时，共尝试 2 次"""
         if not _POSTGRES_AVAILABLE:
-            logger.warning("PostgreSQL dependencies are unavailable: %s", _POSTGRES_IMPORT_ERROR)
+            logger.warning(
+                "PostgreSQL dependencies are unavailable: %s. Install with: %s",
+                _POSTGRES_IMPORT_ERROR,
+                POSTGRES_DEPENDENCY_INSTALL_HINT,
+            )
             return None
 
         last_error = None
@@ -67,7 +74,10 @@ class MemoryManager:
             return True
 
         if not _POSTGRES_AVAILABLE:
-            logger.warning("PostgreSQL checkpoint dependencies unavailable, skip schema setup")
+            logger.warning(
+                "PostgreSQL checkpoint dependencies unavailable, skip schema setup. Install with: %s",
+                POSTGRES_DEPENDENCY_INSTALL_HINT,
+            )
             return False
 
         conn = self._connect_with_retry(db_url)
@@ -95,10 +105,10 @@ class MemoryManager:
             db_url = get_db_url()
             if db_url and db_url.strip():
                 return db_url
-            logger.warning("db_url is empty, will fallback to MemorySaver")
+            logger.warning("PGDATABASE_URL is empty, will fallback to MemorySaver")
             return None
         except Exception as e:
-            logger.warning(f"Failed to get db_url: {e}, will fallback to MemorySaver")
+            logger.warning(f"Failed to get PGDATABASE_URL: {e}, will fallback to MemorySaver")
             return None
 
     def _create_fallback_checkpointer(self) -> MemorySaver:
@@ -114,8 +124,9 @@ class MemoryManager:
 
         if not _POSTGRES_AVAILABLE:
             logger.warning(
-                "PostgreSQL checkpoint dependencies unavailable (%s), falling back to MemorySaver",
+                "PostgreSQL checkpoint dependencies unavailable (%s), falling back to MemorySaver. Install with: %s",
                 _POSTGRES_IMPORT_ERROR,
+                POSTGRES_DEPENDENCY_INSTALL_HINT,
             )
             return self._create_fallback_checkpointer()
 

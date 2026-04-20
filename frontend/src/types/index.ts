@@ -33,7 +33,6 @@ export interface User {
   age_group: AgeGroup;
   gender: Gender;
   occupation: Occupation;
-  guardian_name: string;
   // 设置字段
   theme: 'dark' | 'light' | 'system';
   notify_enabled: boolean;
@@ -63,7 +62,6 @@ export interface UserProfileUpdate {
   age_group?: AgeGroup;
   gender?: Gender;
   occupation?: Occupation;
-  guardian_name?: string;
 }
 
 // 修改密码请求类型
@@ -96,6 +94,7 @@ export interface Contact {
   user_id: number;
   name: string;
   phone: string;
+  email: string;
   relationship: string;
   is_guardian: boolean;
   created_at: string;
@@ -104,6 +103,7 @@ export interface Contact {
 export interface ContactCreate {
   name: string;
   phone: string;
+  email: string;
   relationship: string;
   is_guardian: boolean;
 }
@@ -111,6 +111,7 @@ export interface ContactCreate {
 // 反诈检测相关类型
 export interface FraudDetectionRequest {
   message: string;
+  language?: 'zh-CN' | 'en-US';
   audio_file?: File | null;
   image_file?: File | null;
   video_file?: File | null;
@@ -121,11 +122,38 @@ export interface FraudDetectionResponse {
   risk_score: number;
   llm_risk_score?: number | null;
   llm_risk_score_available?: boolean;
+  score_source?: string;
+  early_warning_score?: number;
+  early_warning_level?: RiskLevel;
   risk_level: RiskLevel;
   scam_type: string;
+  risk_clues?: string[];
+  matched_rule_ids?: string[];
+  hard_rule_ids?: string[];
+  soft_rule_ids?: string[];
+  matched_spans?: Array<{
+    rule_id?: string;
+    text?: string;
+    start?: number;
+    end?: number;
+  }>;
+  source_priority?: string[];
+  popup_severity?: 'none' | 'soft' | 'blocking';
+  critical_guardrail_triggered?: boolean;
+  voice_warning_required?: boolean;
+  guardian_intervention_required?: boolean;
+  score_breakdown?: Record<string, unknown>;
   warning_message: string;
   final_report: string;
   guardian_alert: boolean;
+  alert_reason?: string;
+  action_items?: string[];
+  escalation_actions?: Array<{
+    type?: string;
+    label?: string;
+    value?: string;
+  }>;
+  guardian_notification?: Record<string, unknown> | null;
   performance_timing?: Record<string, unknown>;
 }
 
@@ -147,6 +175,21 @@ export interface FraudEarlyWarning {
   risk_level: 'low' | 'medium' | 'high';
   warning_message: string;
   risk_clues?: string[];
+  matched_rule_ids?: string[];
+  hard_rule_ids?: string[];
+  soft_rule_ids?: string[];
+  matched_spans?: Array<{
+    rule_id?: string;
+    text?: string;
+    start?: number;
+    end?: number;
+  }>;
+  source_priority?: string[];
+  popup_severity?: 'none' | 'soft' | 'blocking';
+  critical_guardrail_triggered?: boolean;
+  voice_warning_required?: boolean;
+  guardian_intervention_required?: boolean;
+  score_breakdown?: Record<string, unknown>;
   source?: string;
   is_preliminary?: boolean;
 }
@@ -208,6 +251,7 @@ export interface FraudTaskWsMessage {
 
 export interface AgentChatRequest {
   message: string;
+  language?: 'zh-CN' | 'en-US';
   conversation_id?: string;
   context?: Record<string, unknown>;
 }

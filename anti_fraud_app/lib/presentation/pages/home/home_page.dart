@@ -6,8 +6,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/utils/emergency_actions.dart';
 import '../../../data/models/detection_result.dart';
 import '../../blocs/detection/detection_bloc.dart';
+import '../../theme/app_appearance.dart';
 import '../../theme/app_locale.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/markdown_text.dart';
@@ -812,6 +814,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     });
     _scrollToBottom();
 
+    if (result.isHighRisk || result.isMediumRisk) {
+      EmergencyActions.speakRiskWarning(
+        riskLevel: result.riskLevel,
+        isEnglish: AppAppearance.instance.isEnglish,
+      );
+    }
+
     if (result.isHighRisk) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showHighRiskDialog(result);
@@ -827,33 +836,93 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
+  Future<void> _dialNumber(String number) async {
+    final ok = await EmergencyActions.dial(number);
+    if (!mounted) return;
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocale.text(
+            '\u65e0\u6cd5\u6253\u5f00\u62e8\u53f7\u5668\uff0c\u8bf7\u624b\u52a8\u62e8\u6253 $number',
+            'Unable to open dialer. Please call $number manually.',
+          )),
+        ),
+      );
+    }
+  }
+
+  void _replayVoiceWarning(DetectionResult result) {
+    EmergencyActions.speakRiskWarning(
+      riskLevel: result.riskLevel,
+      isEnglish: AppAppearance.instance.isEnglish,
+    );
+  }
+
   void _showHighRiskDialog(DetectionResult result) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final guardianAction = result.guardianCallAction;
         return AlertDialog(
           backgroundColor: AppTheme.surfaceColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: const BorderSide(color: AppTheme.errorColor),
           ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor),
-              SizedBox(width: 10),
-              Text('高风险警告'),
+              const Icon(Icons.warning_amber_rounded,
+                  color: AppTheme.errorColor),
+              const SizedBox(width: 10),
+              Text(AppLocale.text('\u9ad8\u98ce\u9669\u9884\u8b66', 'High Risk Alert')),
             ],
           ),
           content: Text(
             result.warningMessage.isEmpty
-                ? '该内容存在高风险诈骗特征，请暂停转账、填写验证码或继续沟通。'
+                ? AppLocale.text(
+                    '\u68c0\u6d4b\u7ed3\u679c\u4e3a\u9ad8\u98ce\u9669\uff0c\u8bf7\u7acb\u5373\u505c\u6b62\u8f6c\u8d26\u548c\u5171\u4eab\u5c4f\u5e55\uff0c\u5e76\u8054\u7cfb\u76d1\u62a4\u4eba\u6216\u62e8\u6253\u53cd\u8bc8\u4e13\u7ebf\u3002',
+                    'The result is high risk. Stop transfers and screen sharing, then contact your guardian or the anti-fraud hotline.',
+                  )
                 : result.warningMessage,
             style: const TextStyle(color: Colors.white70, height: 1.5),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('我知道了'),
+              child: Text(AppLocale.text('\u5173\u95ed', 'Close')),
+            ),
+            TextButton.icon(
+              onPressed: () => _replayVoiceWarning(result),
+              icon: const Icon(Icons.volume_up_outlined),
+              label: Text(AppLocale.text('\u8bed\u97f3\u8b66\u793a', 'Voice Warning')),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _dialNumber('96110');
+              },
+              icon: const Icon(Icons.phone_outlined),
+              label: Text(AppLocale.text('\u62e8\u6253 96110', 'Call 96110')),
+            ),
+            if (guardianAction != null)
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  _dialNumber(guardianAction.value);
+                },
+                icon: const Icon(Icons.contact_phone_outlined),
+                label: Text(guardianAction.label.isEmpty
+                    ? AppLocale.text('\u8054\u7cfb\u76d1\u62a4\u4eba', 'Contact Guardian')
+                    : guardianAction.label),
+              ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _dialNumber('110');
+              },
+              icon: const Icon(Icons.local_police_outlined),
+              label: Text(AppLocale.text('\u62e8\u6253 110', 'Call 110')),
             ),
             ElevatedButton(
               onPressed: () {
@@ -865,7 +934,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                 );
               },
-              child: const Text('查看详细报告'),
+              child: Text(AppLocale.text('\u67e5\u770b\u8be6\u60c5', 'View Details')),
             ),
           ],
         );

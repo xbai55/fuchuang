@@ -11,6 +11,7 @@ import {
 import { storage } from '../utils/storage';
 import { useI18n } from '../i18n';
 import { maskEmail, maskUsername, USER_SETTINGS_CHANGED_EVENT } from '../utils/privacy';
+import { APP_NAME, APP_NAME_EN, APP_TAGLINE, APP_TAGLINE_EN, BRAND_LOGO_SRC } from '../utils/brand';
 import type { User } from '../types';
 
 const { Sider } = Layout;
@@ -30,6 +31,8 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   });
 
   const t = (zh: string, en: string) => (isZh ? zh : en);
+  const brandName = t(APP_NAME, APP_NAME_EN);
+  const brandTagline = t(APP_TAGLINE, APP_TAGLINE_EN);
 
   useEffect(() => {
     const syncUser = () => {
@@ -71,13 +74,13 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
     {
       key: 'chat',
       icon: <MessageOutlined />,
-      label: t('风险识别对话', 'Risk Analysis Chat'),
+      label: t('风险识别', 'Risk Analysis'),
       onClick: () => onPageChange('chat'),
     },
     {
       key: 'contacts',
       icon: <ContactsOutlined />,
-      label: t('紧急联系人', 'Emergency Contacts'),
+      label: t('\u53ef\u4fe1\u8054\u7cfb\u4eba', 'Trusted Contacts'),
       onClick: () => onPageChange('contacts'),
     },
   ];
@@ -99,15 +102,21 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
   return (
     <Sider
-      width={260}
-      className="bg-darker border-r border-gray-800"
+      width={96}
+      className="app-sidebar agent-sidebar bg-darker"
       style={{ overflow: 'auto', height: '100vh', position: 'fixed', left: 0, top: 0 }}
     >
-      <div className="p-6">
-        <div className="text-xs uppercase tracking-[0.3em] text-gray-500">{t('守护', 'GUARD')}</div>
-        <h1 className="mt-2 text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-          {t('反诈预警', 'Anti-fraud Alert')}
-        </h1>
+      <div className="agent-brand-block px-5 pb-6 pt-5">
+        <div className="flex items-center gap-3">
+          <div className="brand-logo h-11 w-11 rounded-lg">
+            <img src={BRAND_LOGO_SRC} alt={brandName} />
+          </div>
+          <div className="agent-brand-text min-w-0">
+            <div className="page-kicker">Tianshu</div>
+            <h1 className="mt-1 truncate text-xl font-semibold text-white">{brandName}</h1>
+          </div>
+        </div>
+        <p className="agent-brand-tagline mt-4 text-xs leading-5 text-gray-400">{brandTagline}</p>
       </div>
 
       <Menu
@@ -118,15 +127,15 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
         className="bg-transparent border-0"
       />
 
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
+      <div className="agent-sidebar-user absolute bottom-0 left-0 right-0 p-4">
         <Dropdown
           menu={{ items: userMenuItems }}
           placement="topLeft"
           trigger={['click']}
         >
-          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-dark-lighter cursor-pointer transition-all">
-            <Avatar icon={<UserOutlined />} className="bg-primary" />
-            <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 rounded-lg p-2 transition-all hover:bg-dark-lighter cursor-pointer">
+            <Avatar icon={<UserOutlined />} className="sidebar-user-avatar" />
+            <div className="agent-user-text flex-1 min-w-0">
               <div className="font-medium truncate text-white">{displayUsername}</div>
               <div className="text-xs text-gray-400 truncate">{displayEmail}</div>
             </div>

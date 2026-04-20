@@ -1,0 +1,3149 @@
+{
+  "structured_rules": [
+    {
+      "rule_id": "hard.law_enforcement_transfer_immediate",
+      "type": "pattern",
+      "pattern": "(\\u8b66\\u5bdf|\\u516c\\u5b89|\\u6d3e\\u51fa\\u6240|\\u68c0\\u5bdf\\u9662|\\u6cd5\\u9662).{0,12}(\\u6307\\u5b9a\\u8d26\\u6237|\\u5b89\\u5168\\u8d26\\u6237|\\u76d1\\u7ba1\\u8d26\\u6237).{0,12}(\\u8f6c\\u8d26|\\u6c47\\u6b3e|\\u8f6c\\u5230)",
+      "weight": 36,
+      "severity": "hard",
+      "floor_score": 90,
+      "clue": "冒充公检法并要求立即转账到指定账户"
+    },
+    {
+      "rule_id": "soft.customer_service_refund",
+      "type": "combination",
+      "left": "客服",
+      "right": "退款",
+      "bonus": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现客服+退款话术，仅作为软信号"
+    },
+    {
+      "rule_id": "default.pattern.1",
+      "type": "pattern",
+      "pattern": "(警察|民警|警官|公安|公安机关|派出所|刑警|经侦|公检法).{0,18}(转账|汇款|打钱|付款|指定账户|安全账户|监管账户|资金核验|自证清白)",
+      "weight": 34,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现冒充警察/公安要求转账或指定账户操作"
+    },
+    {
+      "rule_id": "default.pattern.2",
+      "type": "pattern",
+      "pattern": "(警察|民警|警官|公安|公安机关|派出所|刑警|经侦|公检法).{0,24}(马上|立刻|立即|否则|不然|报警|冻结|逮捕|拘留|通缉).{0,24}(转账|汇款|打钱|付款|指定账户|安全账户|监管账户)",
+      "weight": 40,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现公检法身份+威胁催促+资金操作强红线"
+    },
+    {
+      "rule_id": "default.pattern.3",
+      "type": "pattern",
+      "pattern": "(客服|官方客服|平台客服|商家|快递|航空|票务|银行客服).{0,16}(退款|退费|理赔|赔付|改签|取消会员|关闭百万保障).{0,16}(验证码|动态码|银行卡|链接|下载|安装|屏幕共享|共享屏幕|远程)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现冒充客服退款理赔并索要敏感操作"
+    },
+    {
+      "rule_id": "default.pattern.4",
+      "type": "pattern",
+      "pattern": "(刷单|做任务|点赞|关注|返利|佣金|兼职).{0,16}(垫付|先付|充值|保证金|手续费|解冻费)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现刷单返利要求垫付或充值"
+    },
+    {
+      "rule_id": "default.pattern.5",
+      "type": "pattern",
+      "pattern": "(贷款|放款|额度|借款|网贷).{0,18}(保证金|解冻费|工本费|手续费|刷流水|包装流水)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现虚假贷款前置收费"
+    },
+    {
+      "rule_id": "default.pattern.6",
+      "type": "pattern",
+      "pattern": "(老师|分析师|带单|内幕消息|稳赚|保本|高收益|翻倍).{0,18}(投资|理财|虚拟币|USDT|充值|转账|入金|平台)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现投资带单高收益诱导入金"
+    },
+    {
+      "rule_id": "default.pattern.7",
+      "type": "pattern",
+      "pattern": "(网恋|恋爱|对象|男朋友|女朋友|交友|相亲).{0,18}(投资|理财|虚拟币|USDT|充值|转账|入金|平台)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现网恋交友诱导投资"
+    },
+    {
+      "rule_id": "default.pattern.8",
+      "type": "pattern",
+      "pattern": "(裸聊|私密视频|不雅视频|偷拍视频).{0,18}(勒索|敲诈|封口费|删视频|发给家人|转账)",
+      "weight": 40,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现裸聊/私密视频敲诈勒索"
+    },
+    {
+      "rule_id": "default.pattern.9",
+      "type": "pattern",
+      "pattern": "(领导|老板|总监|主任|经理).{0,18}(马上|立刻|立即|紧急|急用)?.{0,12}(转账|汇款|打款|付款|对公账户)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现冒充领导紧急转账"
+    },
+    {
+      "rule_id": "default.pattern.10",
+      "type": "pattern",
+      "pattern": "(儿子|女儿|孙子|孙女|家属|亲属|孩子).{0,18}(出事|被抓|车祸|手术|急救|拘留).{0,18}(转账|汇款|打钱|付款)",
+      "weight": 32,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现冒充亲属紧急求助汇款"
+    },
+    {
+      "rule_id": "default.pattern.11",
+      "type": "pattern",
+      "pattern": "(注销|清空|修复|消除).{0,12}(征信|校园贷|学生贷|贷款记录).{0,18}(转账|汇款|手续费|保证金|验证码|动态码)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现征信修复/注销校园贷收费或验证码"
+    },
+    {
+      "rule_id": "default.pattern.12",
+      "type": "pattern",
+      "pattern": "(远程协助|远程控制|屏幕共享|共享屏幕|会议软件).{0,18}(银行卡|账户|余额|转账|付款|验证码|动态码)",
+      "weight": 30,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现远程控制查看账户或验证码"
+    },
+    {
+      "rule_id": "default.pattern.13",
+      "type": "pattern",
+      "pattern": "(企业微信|会议软件|腾讯会议|zoom|钉钉).{0,10}(屏幕共享|远程协助|远程控制)",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现会议软件引导共享屏幕话术"
+    },
+    {
+      "rule_id": "default.pattern.14",
+      "type": "pattern",
+      "pattern": "(闲鱼|二手平台|同城交易).{0,12}(私下交易|保证金|先付款)",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现二手交易私下付款诱导"
+    },
+    {
+      "rule_id": "default.pattern.15",
+      "type": "pattern",
+      "pattern": "(网恋|恋爱交友|婚恋平台).{0,16}(投资|充值|带单|内幕)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现情感关系引导投资话术"
+    },
+    {
+      "rule_id": "default.pattern.16",
+      "type": "pattern",
+      "pattern": "(公安局|派出所|刑侦|经侦|检察院|法院|反诈中心).{0,14}(涉案|洗钱|立案|通缉|资金清查|账户冻结)",
+      "weight": 24,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现公检法涉案冻结类恐吓话术"
+    },
+    {
+      "rule_id": "default.pattern.17",
+      "type": "pattern",
+      "pattern": "(警察|民警|警官|公安机关).{0,14}(办案|调查|传唤|配合调查|账户异常|银行卡异常)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现警察办案调查施压话术"
+    },
+    {
+      "rule_id": "default.pattern.18",
+      "type": "pattern",
+      "pattern": "(国家反诈中心|反诈民警|警察).{0,12}(下载|安装|打开).{0,12}(会议软件|远程协助|共享屏幕)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充反诈民警诱导远程操作"
+    },
+    {
+      "rule_id": "default.pattern.19",
+      "type": "pattern",
+      "pattern": "(安全账户|监管账户|国库账户|审查账户).{0,12}(转账|汇款|资金核验|自证清白)",
+      "weight": 24,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现公检法安全账户转账指令"
+    },
+    {
+      "rule_id": "default.pattern.20",
+      "type": "pattern",
+      "pattern": "(案件保密|不得告知|全程保密|不能挂断|电话取证).{0,10}(民警|警官|检察官|法官)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现公检法保密控场话术"
+    },
+    {
+      "rule_id": "default.pattern.21",
+      "type": "pattern",
+      "pattern": "(客服|官方客服|平台客服).{0,12}(退款|退费|理赔|赔付|改签).{0,12}(验证码|链接|下载|共享屏幕|远程)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充客服退款理赔链路"
+    },
+    {
+      "rule_id": "default.pattern.22",
+      "type": "pattern",
+      "pattern": "(机票|航班|火车票|高铁票|演唱会票).{0,12}(改签|退票|退费|补偿).{0,12}(链接|下载|验证码)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现票务改签退费诱导"
+    },
+    {
+      "rule_id": "default.pattern.23",
+      "type": "pattern",
+      "pattern": "(贷款|放款|低息|征信).{0,14}(保证金|解冻费|工本费|包装流水|刷流水|手续费)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现贷款前置收费话术"
+    },
+    {
+      "rule_id": "default.pattern.24",
+      "type": "pattern",
+      "pattern": "(注销|修复|消除|清空).{0,12}(征信|校园贷|不良记录|贷款记录)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现征信修复或注销恐吓话术"
+    },
+    {
+      "rule_id": "default.pattern.25",
+      "type": "pattern",
+      "pattern": "(刷单|做任务|垫付单|兼职任务).{0,12}(垫付|充值|返利|佣金|连单)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现刷单返利诱导垫付"
+    },
+    {
+      "rule_id": "default.pattern.26",
+      "type": "pattern",
+      "pattern": "(带单|老师|分析师|内幕消息|群荐股).{0,12}(稳赚|保本|高收益|翻倍)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现投资带单高收益诱导"
+    },
+    {
+      "rule_id": "default.pattern.27",
+      "type": "pattern",
+      "pattern": "(数字货币|虚拟币|USDT|泰达币).{0,12}(入金|出金|搬砖|套利|钱包)",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现虚拟币投资转账诱导"
+    },
+    {
+      "rule_id": "default.pattern.28",
+      "type": "pattern",
+      "pattern": "(裸聊|私密视频|不雅视频).{0,14}(勒索|敲诈|封口费|删视频|转账)",
+      "weight": 26,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现裸聊敲诈勒索话术"
+    },
+    {
+      "rule_id": "default.pattern.29",
+      "type": "pattern",
+      "pattern": "(领导|老板|总监|主任).{0,10}(转账|打款|汇款).{0,8}(紧急|马上|立刻)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充领导紧急转账"
+    },
+    {
+      "rule_id": "default.pattern.30",
+      "type": "pattern",
+      "pattern": "(子女|儿子|女儿|孙子|孙女).{0,14}(出事|被抓|车祸|急救|手术).{0,10}(转账|汇款|打钱)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充亲属紧急求助转账"
+    },
+    {
+      "rule_id": "default.pattern.31",
+      "type": "pattern",
+      "pattern": "(朋友|同学|亲戚|熟人).{0,12}(换号|新号|借钱|帮忙转账)",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充熟人借款话术"
+    },
+    {
+      "rule_id": "default.pattern.32",
+      "type": "pattern",
+      "pattern": "(保健品|养老项目|以房养老|养老服务).{0,12}(高收益|返现|专家推荐|内部名额)",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现养老保健类高收益诱导"
+    },
+    {
+      "rule_id": "default.pattern.33",
+      "type": "pattern",
+      "pattern": "(税务局|市场监管局|工商局).{0,14}(罚款|处罚|营业执照异常|账户异常).{0,10}(转账|缴费|验证码)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现税务工商处罚缴费诱导"
+    },
+    {
+      "rule_id": "default.pattern.34",
+      "type": "pattern",
+      "pattern": "(财务|出纳|会计).{0,12}(对公账户|公账|公对公).{0,12}(转账|付款|打款)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现财务岗位对公转账诱导"
+    },
+    {
+      "rule_id": "default.pattern.35",
+      "type": "pattern",
+      "pattern": "(公章|合同|发票).{0,12}(紧急付款|先付款|先垫付)",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现公章合同发票类紧急付款诱导"
+    },
+    {
+      "rule_id": "default.pattern.36",
+      "type": "pattern",
+      "pattern": "(跑分|刷流水|代收款|代付).{0,12}(银行卡|U盾|验证码|佣金)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现跑分洗钱招募话术"
+    },
+    {
+      "rule_id": "default.pattern.37",
+      "type": "pattern",
+      "pattern": "(网警|网络警察|报警中心).{0,16}(保证金|解冻资金|追回被骗资金|缴费)",
+      "weight": 22,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充网警二次诈骗"
+    },
+    {
+      "rule_id": "default.pattern.38",
+      "type": "pattern",
+      "pattern": "(游戏账号|装备|皮肤|代练).{0,12}(私下交易|先付款|保证金|解冻)",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现游戏交易私下付款诱导"
+    },
+    {
+      "rule_id": "default.pattern.39",
+      "type": "pattern",
+      "pattern": "(快递|包裹|物流).{0,12}(丢失|破损|理赔).{0,12}(链接|验证码|共享屏幕)",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现快递理赔诱导操作"
+    },
+    {
+      "rule_id": "default.pattern.40",
+      "type": "pattern",
+      "pattern": "(公安机关|刑警|经侦|网安|反诈民警).{0,12}(线上办案|视频笔录|远程取证|电话取证).{0,10}(共享屏幕|下载|验证码)",
+      "weight": 24,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现冒充警务远程办案取证链路"
+    },
+    {
+      "rule_id": "default.pattern.41",
+      "type": "pattern",
+      "pattern": "(报警|报案|立案).{0,12}(QQ|微信|临时群).{0,10}(网警|民警|追回|协查)",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现引导至社交软件的假报警链路"
+    },
+    {
+      "rule_id": "default.pattern.42",
+      "type": "pattern",
+      "pattern": "(充值|话费充值|游戏充值).{0,12}(返利|优惠|双倍到账|立返).{0,10}(链接|二维码|验证码)",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现充值返利类诱导"
+    },
+    {
+      "rule_id": "default.pattern.43",
+      "type": "pattern",
+      "pattern": "(收藏品|字画|邮票|纪念币).{0,12}(高价回购|代拍|保底收益|包售出)",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现收藏品高价回购投资诱导"
+    },
+    {
+      "rule_id": "default.keyword.1",
+      "type": "keyword",
+      "keyword": "共享屏幕",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 共享屏幕"
+    },
+    {
+      "rule_id": "default.keyword.2",
+      "type": "keyword",
+      "keyword": "企业微信",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 企业微信"
+    },
+    {
+      "rule_id": "default.keyword.3",
+      "type": "keyword",
+      "keyword": "同城交易",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 同城交易"
+    },
+    {
+      "rule_id": "default.keyword.4",
+      "type": "keyword",
+      "keyword": "闲鱼",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 闲鱼"
+    },
+    {
+      "rule_id": "default.keyword.5",
+      "type": "keyword",
+      "keyword": "婚恋平台",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 婚恋平台"
+    },
+    {
+      "rule_id": "default.keyword.6",
+      "type": "keyword",
+      "keyword": "小额试投",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 小额试投"
+    },
+    {
+      "rule_id": "default.keyword.7",
+      "type": "keyword",
+      "keyword": "先打款",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 先打款"
+    },
+    {
+      "rule_id": "default.keyword.8",
+      "type": "keyword",
+      "keyword": "官方客服",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 官方客服"
+    },
+    {
+      "rule_id": "default.keyword.9",
+      "type": "keyword",
+      "keyword": "公安局",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 公安局"
+    },
+    {
+      "rule_id": "default.keyword.10",
+      "type": "keyword",
+      "keyword": "警察",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 警察"
+    },
+    {
+      "rule_id": "default.keyword.11",
+      "type": "keyword",
+      "keyword": "民警",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 民警"
+    },
+    {
+      "rule_id": "default.keyword.12",
+      "type": "keyword",
+      "keyword": "警官",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 警官"
+    },
+    {
+      "rule_id": "default.keyword.13",
+      "type": "keyword",
+      "keyword": "公安",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 公安"
+    },
+    {
+      "rule_id": "default.keyword.14",
+      "type": "keyword",
+      "keyword": "公安机关",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 公安机关"
+    },
+    {
+      "rule_id": "default.keyword.15",
+      "type": "keyword",
+      "keyword": "检察院",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 检察院"
+    },
+    {
+      "rule_id": "default.keyword.16",
+      "type": "keyword",
+      "keyword": "法院",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 法院"
+    },
+    {
+      "rule_id": "default.keyword.17",
+      "type": "keyword",
+      "keyword": "刑侦",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 刑侦"
+    },
+    {
+      "rule_id": "default.keyword.18",
+      "type": "keyword",
+      "keyword": "经侦",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 经侦"
+    },
+    {
+      "rule_id": "default.keyword.19",
+      "type": "keyword",
+      "keyword": "反诈中心",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 反诈中心"
+    },
+    {
+      "rule_id": "default.keyword.20",
+      "type": "keyword",
+      "keyword": "国家反诈中心",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 国家反诈中心"
+    },
+    {
+      "rule_id": "default.keyword.21",
+      "type": "keyword",
+      "keyword": "反诈民警",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 反诈民警"
+    },
+    {
+      "rule_id": "default.keyword.22",
+      "type": "keyword",
+      "keyword": "办案",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 办案"
+    },
+    {
+      "rule_id": "default.keyword.23",
+      "type": "keyword",
+      "keyword": "传唤",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 传唤"
+    },
+    {
+      "rule_id": "default.keyword.24",
+      "type": "keyword",
+      "keyword": "配合调查",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 配合调查"
+    },
+    {
+      "rule_id": "default.keyword.25",
+      "type": "keyword",
+      "keyword": "银行卡异常",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 银行卡异常"
+    },
+    {
+      "rule_id": "default.keyword.26",
+      "type": "keyword",
+      "keyword": "账户异常",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 账户异常"
+    },
+    {
+      "rule_id": "default.keyword.27",
+      "type": "keyword",
+      "keyword": "涉案",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 涉案"
+    },
+    {
+      "rule_id": "default.keyword.28",
+      "type": "keyword",
+      "keyword": "资金清查",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 资金清查"
+    },
+    {
+      "rule_id": "default.keyword.29",
+      "type": "keyword",
+      "keyword": "安全账户",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 安全账户"
+    },
+    {
+      "rule_id": "default.keyword.30",
+      "type": "keyword",
+      "keyword": "监管账户",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 监管账户"
+    },
+    {
+      "rule_id": "default.keyword.31",
+      "type": "keyword",
+      "keyword": "案件保密",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 案件保密"
+    },
+    {
+      "rule_id": "default.keyword.32",
+      "type": "keyword",
+      "keyword": "不能挂断",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 不能挂断"
+    },
+    {
+      "rule_id": "default.keyword.33",
+      "type": "keyword",
+      "keyword": "退款理赔",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 退款理赔"
+    },
+    {
+      "rule_id": "default.keyword.34",
+      "type": "keyword",
+      "keyword": "机票改签",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 机票改签"
+    },
+    {
+      "rule_id": "default.keyword.35",
+      "type": "keyword",
+      "keyword": "火车票改签",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 火车票改签"
+    },
+    {
+      "rule_id": "default.keyword.36",
+      "type": "keyword",
+      "keyword": "演唱会票",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 演唱会票"
+    },
+    {
+      "rule_id": "default.keyword.37",
+      "type": "keyword",
+      "keyword": "征信修复",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 征信修复"
+    },
+    {
+      "rule_id": "default.keyword.38",
+      "type": "keyword",
+      "keyword": "注销校园贷",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 注销校园贷"
+    },
+    {
+      "rule_id": "default.keyword.39",
+      "type": "keyword",
+      "keyword": "保证金",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 保证金"
+    },
+    {
+      "rule_id": "default.keyword.40",
+      "type": "keyword",
+      "keyword": "解冻费",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 解冻费"
+    },
+    {
+      "rule_id": "default.keyword.41",
+      "type": "keyword",
+      "keyword": "工本费",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 工本费"
+    },
+    {
+      "rule_id": "default.keyword.42",
+      "type": "keyword",
+      "keyword": "刷流水",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 刷流水"
+    },
+    {
+      "rule_id": "default.keyword.43",
+      "type": "keyword",
+      "keyword": "刷单返利",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 刷单返利"
+    },
+    {
+      "rule_id": "default.keyword.44",
+      "type": "keyword",
+      "keyword": "垫付",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 垫付"
+    },
+    {
+      "rule_id": "default.keyword.45",
+      "type": "keyword",
+      "keyword": "连单",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 连单"
+    },
+    {
+      "rule_id": "default.keyword.46",
+      "type": "keyword",
+      "keyword": "带单老师",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 带单老师"
+    },
+    {
+      "rule_id": "default.keyword.47",
+      "type": "keyword",
+      "keyword": "内幕消息",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 内幕消息"
+    },
+    {
+      "rule_id": "default.keyword.48",
+      "type": "keyword",
+      "keyword": "高收益",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 高收益"
+    },
+    {
+      "rule_id": "default.keyword.49",
+      "type": "keyword",
+      "keyword": "杀猪盘",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 杀猪盘"
+    },
+    {
+      "rule_id": "default.keyword.50",
+      "type": "keyword",
+      "keyword": "网恋投资",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 网恋投资"
+    },
+    {
+      "rule_id": "default.keyword.51",
+      "type": "keyword",
+      "keyword": "数字货币",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 数字货币"
+    },
+    {
+      "rule_id": "default.keyword.52",
+      "type": "keyword",
+      "keyword": "USDT",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: USDT"
+    },
+    {
+      "rule_id": "default.keyword.53",
+      "type": "keyword",
+      "keyword": "泰达币",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 泰达币"
+    },
+    {
+      "rule_id": "default.keyword.54",
+      "type": "keyword",
+      "keyword": "裸聊",
+      "weight": 20,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 裸聊"
+    },
+    {
+      "rule_id": "default.keyword.55",
+      "type": "keyword",
+      "keyword": "裸聊敲诈",
+      "weight": 24,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "?????: 裸聊敲诈"
+    },
+    {
+      "rule_id": "default.keyword.56",
+      "type": "keyword",
+      "keyword": "冒充领导",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 冒充领导"
+    },
+    {
+      "rule_id": "default.keyword.57",
+      "type": "keyword",
+      "keyword": "领导转账",
+      "weight": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 领导转账"
+    },
+    {
+      "rule_id": "default.keyword.58",
+      "type": "keyword",
+      "keyword": "子女出事",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 子女出事"
+    },
+    {
+      "rule_id": "default.keyword.59",
+      "type": "keyword",
+      "keyword": "孙子出事",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 孙子出事"
+    },
+    {
+      "rule_id": "default.keyword.60",
+      "type": "keyword",
+      "keyword": "急救",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 急救"
+    },
+    {
+      "rule_id": "default.keyword.61",
+      "type": "keyword",
+      "keyword": "手术费",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 手术费"
+    },
+    {
+      "rule_id": "default.keyword.62",
+      "type": "keyword",
+      "keyword": "保健品",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 保健品"
+    },
+    {
+      "rule_id": "default.keyword.63",
+      "type": "keyword",
+      "keyword": "养老项目",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 养老项目"
+    },
+    {
+      "rule_id": "default.keyword.64",
+      "type": "keyword",
+      "keyword": "以房养老",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 以房养老"
+    },
+    {
+      "rule_id": "default.keyword.65",
+      "type": "keyword",
+      "keyword": "内部名额",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 内部名额"
+    },
+    {
+      "rule_id": "default.keyword.66",
+      "type": "keyword",
+      "keyword": "税务局",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 税务局"
+    },
+    {
+      "rule_id": "default.keyword.67",
+      "type": "keyword",
+      "keyword": "市场监管",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 市场监管"
+    },
+    {
+      "rule_id": "default.keyword.68",
+      "type": "keyword",
+      "keyword": "工商局",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 工商局"
+    },
+    {
+      "rule_id": "default.keyword.69",
+      "type": "keyword",
+      "keyword": "营业执照异常",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 营业执照异常"
+    },
+    {
+      "rule_id": "default.keyword.70",
+      "type": "keyword",
+      "keyword": "处罚缴费",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 处罚缴费"
+    },
+    {
+      "rule_id": "default.keyword.71",
+      "type": "keyword",
+      "keyword": "财务",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 财务"
+    },
+    {
+      "rule_id": "default.keyword.72",
+      "type": "keyword",
+      "keyword": "出纳",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 出纳"
+    },
+    {
+      "rule_id": "default.keyword.73",
+      "type": "keyword",
+      "keyword": "会计",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 会计"
+    },
+    {
+      "rule_id": "default.keyword.74",
+      "type": "keyword",
+      "keyword": "对公账户",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 对公账户"
+    },
+    {
+      "rule_id": "default.keyword.75",
+      "type": "keyword",
+      "keyword": "公对公",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 公对公"
+    },
+    {
+      "rule_id": "default.keyword.76",
+      "type": "keyword",
+      "keyword": "公账",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 公账"
+    },
+    {
+      "rule_id": "default.keyword.77",
+      "type": "keyword",
+      "keyword": "发票异常",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 发票异常"
+    },
+    {
+      "rule_id": "default.keyword.78",
+      "type": "keyword",
+      "keyword": "公章",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 公章"
+    },
+    {
+      "rule_id": "default.keyword.79",
+      "type": "keyword",
+      "keyword": "合同付款",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 合同付款"
+    },
+    {
+      "rule_id": "default.keyword.80",
+      "type": "keyword",
+      "keyword": "跑分",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 跑分"
+    },
+    {
+      "rule_id": "default.keyword.81",
+      "type": "keyword",
+      "keyword": "网警",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 网警"
+    },
+    {
+      "rule_id": "default.keyword.82",
+      "type": "keyword",
+      "keyword": "追回被骗资金",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 追回被骗资金"
+    },
+    {
+      "rule_id": "default.keyword.83",
+      "type": "keyword",
+      "keyword": "游戏交易",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 游戏交易"
+    },
+    {
+      "rule_id": "default.keyword.84",
+      "type": "keyword",
+      "keyword": "快递理赔",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 快递理赔"
+    },
+    {
+      "rule_id": "default.keyword.85",
+      "type": "keyword",
+      "keyword": "网安",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 网安"
+    },
+    {
+      "rule_id": "default.keyword.86",
+      "type": "keyword",
+      "keyword": "刑警",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 刑警"
+    },
+    {
+      "rule_id": "default.keyword.87",
+      "type": "keyword",
+      "keyword": "电话取证",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 电话取证"
+    },
+    {
+      "rule_id": "default.keyword.88",
+      "type": "keyword",
+      "keyword": "线上办案",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 线上办案"
+    },
+    {
+      "rule_id": "default.keyword.89",
+      "type": "keyword",
+      "keyword": "视频笔录",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 视频笔录"
+    },
+    {
+      "rule_id": "default.keyword.90",
+      "type": "keyword",
+      "keyword": "指定账户",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 指定账户"
+    },
+    {
+      "rule_id": "default.keyword.91",
+      "type": "keyword",
+      "keyword": "国库账户",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 国库账户"
+    },
+    {
+      "rule_id": "default.keyword.92",
+      "type": "keyword",
+      "keyword": "自证清白",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 自证清白"
+    },
+    {
+      "rule_id": "default.keyword.93",
+      "type": "keyword",
+      "keyword": "协查通报",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 协查通报"
+    },
+    {
+      "rule_id": "default.keyword.94",
+      "type": "keyword",
+      "keyword": "立案调查",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 立案调查"
+    },
+    {
+      "rule_id": "default.keyword.95",
+      "type": "keyword",
+      "keyword": "冻结资金",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 冻结资金"
+    },
+    {
+      "rule_id": "default.keyword.96",
+      "type": "keyword",
+      "keyword": "网安民警",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 网安民警"
+    },
+    {
+      "rule_id": "default.keyword.97",
+      "type": "keyword",
+      "keyword": "报警回执",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 报警回执"
+    },
+    {
+      "rule_id": "default.keyword.98",
+      "type": "keyword",
+      "keyword": "二次诈骗",
+      "weight": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 二次诈骗"
+    },
+    {
+      "rule_id": "default.keyword.99",
+      "type": "keyword",
+      "keyword": "冒充公检法",
+      "weight": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 冒充公检法"
+    },
+    {
+      "rule_id": "default.keyword.100",
+      "type": "keyword",
+      "keyword": "追回资金",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 追回资金"
+    },
+    {
+      "rule_id": "default.keyword.101",
+      "type": "keyword",
+      "keyword": "话费充值",
+      "weight": 8,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 话费充值"
+    },
+    {
+      "rule_id": "default.keyword.102",
+      "type": "keyword",
+      "keyword": "充值返利",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 充值返利"
+    },
+    {
+      "rule_id": "default.keyword.103",
+      "type": "keyword",
+      "keyword": "收藏品回购",
+      "weight": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 收藏品回购"
+    },
+    {
+      "rule_id": "default.keyword.104",
+      "type": "keyword",
+      "keyword": "收藏品投资",
+      "weight": 10,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "?????: 收藏品投资"
+    },
+    {
+      "rule_id": "default.combo.1",
+      "type": "combination",
+      "left": "会议软件",
+      "right": "共享屏幕",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现会议软件+共享屏幕组合"
+    },
+    {
+      "rule_id": "default.combo.2",
+      "type": "combination",
+      "left": "闲鱼",
+      "right": "保证金",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现二手交易+保证金组合"
+    },
+    {
+      "rule_id": "default.combo.3",
+      "type": "combination",
+      "left": "网恋",
+      "right": "小额试投",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现网恋+小额试投组合"
+    },
+    {
+      "rule_id": "default.combo.4",
+      "type": "combination",
+      "left": "公安局",
+      "right": "安全账户",
+      "bonus": 24,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现公检法+安全账户组合"
+    },
+    {
+      "rule_id": "default.combo.5",
+      "type": "combination",
+      "left": "警察",
+      "right": "安全账户",
+      "bonus": 24,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现警察+安全账户组合"
+    },
+    {
+      "rule_id": "default.combo.6",
+      "type": "combination",
+      "left": "警察",
+      "right": "案件保密",
+      "bonus": 20,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现警察+案件保密组合"
+    },
+    {
+      "rule_id": "default.combo.7",
+      "type": "combination",
+      "left": "反诈民警",
+      "right": "共享屏幕",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现反诈民警+共享屏幕组合"
+    },
+    {
+      "rule_id": "default.combo.8",
+      "type": "combination",
+      "left": "检察院",
+      "right": "转账",
+      "bonus": 22,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现检察院+转账组合"
+    },
+    {
+      "rule_id": "default.combo.9",
+      "type": "combination",
+      "left": "法院",
+      "right": "资金清查",
+      "bonus": 20,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现法院+资金清查组合"
+    },
+    {
+      "rule_id": "default.combo.10",
+      "type": "combination",
+      "left": "案件保密",
+      "right": "不能挂断",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现保密+不能挂断控场组合"
+    },
+    {
+      "rule_id": "default.combo.11",
+      "type": "combination",
+      "left": "客服",
+      "right": "验证码",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现客服+验证码组合"
+    },
+    {
+      "rule_id": "default.combo.12",
+      "type": "combination",
+      "left": "退款",
+      "right": "共享屏幕",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现退款+共享屏幕组合"
+    },
+    {
+      "rule_id": "default.combo.13",
+      "type": "combination",
+      "left": "机票",
+      "right": "改签",
+      "bonus": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现机票+改签组合"
+    },
+    {
+      "rule_id": "default.combo.14",
+      "type": "combination",
+      "left": "改签",
+      "right": "验证码",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现改签+验证码组合"
+    },
+    {
+      "rule_id": "default.combo.15",
+      "type": "combination",
+      "left": "贷款",
+      "right": "保证金",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现贷款+保证金组合"
+    },
+    {
+      "rule_id": "default.combo.16",
+      "type": "combination",
+      "left": "贷款",
+      "right": "解冻费",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现贷款+解冻费组合"
+    },
+    {
+      "rule_id": "default.combo.17",
+      "type": "combination",
+      "left": "征信",
+      "right": "注销",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现征信+注销组合"
+    },
+    {
+      "rule_id": "default.combo.18",
+      "type": "combination",
+      "left": "刷单",
+      "right": "垫付",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现刷单+垫付组合"
+    },
+    {
+      "rule_id": "default.combo.19",
+      "type": "combination",
+      "left": "刷单",
+      "right": "连单",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现刷单+连单组合"
+    },
+    {
+      "rule_id": "default.combo.20",
+      "type": "combination",
+      "left": "投资",
+      "right": "带单",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现投资+带单组合"
+    },
+    {
+      "rule_id": "default.combo.21",
+      "type": "combination",
+      "left": "网恋",
+      "right": "投资",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现网恋+投资组合"
+    },
+    {
+      "rule_id": "default.combo.22",
+      "type": "combination",
+      "left": "数字货币",
+      "right": "USDT",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现数字货币+USDT组合"
+    },
+    {
+      "rule_id": "default.combo.23",
+      "type": "combination",
+      "left": "裸聊",
+      "right": "转账",
+      "bonus": 22,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现裸聊+转账组合"
+    },
+    {
+      "rule_id": "default.combo.24",
+      "type": "combination",
+      "left": "领导",
+      "right": "转账",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现领导+转账组合"
+    },
+    {
+      "rule_id": "default.combo.25",
+      "type": "combination",
+      "left": "子女",
+      "right": "出事",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现子女+出事组合"
+    },
+    {
+      "rule_id": "default.combo.26",
+      "type": "combination",
+      "left": "子女",
+      "right": "转账",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现子女+转账组合"
+    },
+    {
+      "rule_id": "default.combo.27",
+      "type": "combination",
+      "left": "养老项目",
+      "right": "高收益",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现养老项目+高收益组合"
+    },
+    {
+      "rule_id": "default.combo.28",
+      "type": "combination",
+      "left": "税务局",
+      "right": "营业执照",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现税务局+营业执照组合"
+    },
+    {
+      "rule_id": "default.combo.29",
+      "type": "combination",
+      "left": "财务",
+      "right": "对公账户",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现财务+对公账户组合"
+    },
+    {
+      "rule_id": "default.combo.30",
+      "type": "combination",
+      "left": "发票",
+      "right": "转账",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现发票+转账组合"
+    },
+    {
+      "rule_id": "default.combo.31",
+      "type": "combination",
+      "left": "公章",
+      "right": "付款",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现公章+付款组合"
+    },
+    {
+      "rule_id": "default.combo.32",
+      "type": "combination",
+      "left": "跑分",
+      "right": "银行卡",
+      "bonus": 20,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现跑分+银行卡组合"
+    },
+    {
+      "rule_id": "default.combo.33",
+      "type": "combination",
+      "left": "网警",
+      "right": "保证金",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现网警+保证金组合"
+    },
+    {
+      "rule_id": "default.combo.34",
+      "type": "combination",
+      "left": "游戏交易",
+      "right": "保证金",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现游戏交易+保证金组合"
+    },
+    {
+      "rule_id": "default.combo.35",
+      "type": "combination",
+      "left": "快递",
+      "right": "理赔",
+      "bonus": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现快递+理赔组合"
+    },
+    {
+      "rule_id": "default.combo.36",
+      "type": "combination",
+      "left": "网警",
+      "right": "QQ",
+      "bonus": 18,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现网警+QQ组合"
+    },
+    {
+      "rule_id": "default.combo.37",
+      "type": "combination",
+      "left": "报警",
+      "right": "QQ",
+      "bonus": 16,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现报警+QQ组合"
+    },
+    {
+      "rule_id": "default.combo.38",
+      "type": "combination",
+      "left": "民警",
+      "right": "不能挂断",
+      "bonus": 20,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现民警+不能挂断控场组合"
+    },
+    {
+      "rule_id": "default.combo.39",
+      "type": "combination",
+      "left": "线上办案",
+      "right": "共享屏幕",
+      "bonus": 20,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现线上办案+共享屏幕组合"
+    },
+    {
+      "rule_id": "default.combo.40",
+      "type": "combination",
+      "left": "立案",
+      "right": "转账",
+      "bonus": 20,
+      "severity": "hard",
+      "floor_score": 0,
+      "clue": "出现立案+转账组合"
+    },
+    {
+      "rule_id": "default.combo.41",
+      "type": "combination",
+      "left": "充值",
+      "right": "返利",
+      "bonus": 12,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现充值+返利组合"
+    },
+    {
+      "rule_id": "default.combo.42",
+      "type": "combination",
+      "left": "收藏品",
+      "right": "回购",
+      "bonus": 14,
+      "severity": "soft",
+      "floor_score": 0,
+      "clue": "出现收藏品+回购组合"
+    }
+  ],
+  "role_profiles": {
+    "student": {
+      "score_policy": {
+        "role_signal_score_threshold": 26,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 8,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.student.pattern.1",
+          "type": "pattern",
+          "pattern": "(校园贷|助学贷款|培训贷|租机贷).{0,12}(注销|清零|修复|解冻|征信消除)",
+          "weight": 22,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生高发: 校园贷注销修复话术"
+        },
+        {
+          "rule_id": "default.student.pattern.2",
+          "type": "pattern",
+          "pattern": "(兼职|刷单|返利|打字员|配音兼职).{0,12}(押金|会费|垫付|连单|卡单)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生高发: 兼职押金垫付骗局"
+        },
+        {
+          "rule_id": "default.student.pattern.3",
+          "type": "pattern",
+          "pattern": "(游戏账号|皮肤|装备|代练).{0,12}(私下交易|担保|保证金|解冻)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生高发: 游戏交易保证金解冻骗局"
+        },
+        {
+          "rule_id": "default.student.pattern.4",
+          "type": "pattern",
+          "pattern": "(奖学金|助学金|校园补贴).{0,12}(银行卡|验证码|转账|手续费)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生高发: 奖助学金领取诈骗"
+        },
+        {
+          "rule_id": "default.student.keyword.1",
+          "type": "keyword",
+          "keyword": "校园贷",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 校园贷"
+        },
+        {
+          "rule_id": "default.student.keyword.2",
+          "type": "keyword",
+          "keyword": "助学贷款",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 助学贷款"
+        },
+        {
+          "rule_id": "default.student.keyword.3",
+          "type": "keyword",
+          "keyword": "培训贷",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 培训贷"
+        },
+        {
+          "rule_id": "default.student.keyword.4",
+          "type": "keyword",
+          "keyword": "租机贷",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 租机贷"
+        },
+        {
+          "rule_id": "default.student.keyword.5",
+          "type": "keyword",
+          "keyword": "兼职返利",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 兼职返利"
+        },
+        {
+          "rule_id": "default.student.keyword.6",
+          "type": "keyword",
+          "keyword": "入会费",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 入会费"
+        },
+        {
+          "rule_id": "default.student.keyword.7",
+          "type": "keyword",
+          "keyword": "押金",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 押金"
+        },
+        {
+          "rule_id": "default.student.keyword.8",
+          "type": "keyword",
+          "keyword": "连单任务",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 连单任务"
+        },
+        {
+          "rule_id": "default.student.keyword.9",
+          "type": "keyword",
+          "keyword": "卡单解冻",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 卡单解冻"
+        },
+        {
+          "rule_id": "default.student.keyword.10",
+          "type": "keyword",
+          "keyword": "奖学金发放",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 奖学金发放"
+        },
+        {
+          "rule_id": "default.student.keyword.11",
+          "type": "keyword",
+          "keyword": "校园补贴",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 校园补贴"
+        },
+        {
+          "rule_id": "default.student.keyword.12",
+          "type": "keyword",
+          "keyword": "培训费退费",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 培训费退费"
+        },
+        {
+          "rule_id": "default.student.keyword.13",
+          "type": "keyword",
+          "keyword": "辅导员通知",
+          "weight": 8,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 辅导员通知"
+        },
+        {
+          "rule_id": "default.student.keyword.14",
+          "type": "keyword",
+          "keyword": "宿舍群通知",
+          "weight": 8,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 宿舍群通知"
+        },
+        {
+          "rule_id": "default.student.keyword.15",
+          "type": "keyword",
+          "keyword": "追星福利",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 追星福利"
+        },
+        {
+          "rule_id": "default.student.keyword.16",
+          "type": "keyword",
+          "keyword": "免费皮肤",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 免费皮肤"
+        },
+        {
+          "rule_id": "default.student.keyword.17",
+          "type": "keyword",
+          "keyword": "游戏代练",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 游戏代练"
+        },
+        {
+          "rule_id": "default.student.keyword.18",
+          "type": "keyword",
+          "keyword": "账号找回",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 账号找回"
+        },
+        {
+          "rule_id": "default.student.combo.1",
+          "type": "combination",
+          "left": "兼职",
+          "right": "押金",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生画像: 兼职+押金组合"
+        },
+        {
+          "rule_id": "default.student.combo.2",
+          "type": "combination",
+          "left": "校园贷",
+          "right": "注销",
+          "bonus": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生画像: 校园贷+注销组合"
+        },
+        {
+          "rule_id": "default.student.combo.3",
+          "type": "combination",
+          "left": "游戏账号",
+          "right": "保证金",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生画像: 游戏账号+保证金组合"
+        },
+        {
+          "rule_id": "default.student.combo.4",
+          "type": "combination",
+          "left": "奖学金",
+          "right": "验证码",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生画像: 奖学金+验证码组合"
+        },
+        {
+          "rule_id": "default.student.combo.5",
+          "type": "combination",
+          "left": "培训费",
+          "right": "退费",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "学生画像: 培训费+退费组合"
+        }
+      ],
+      "role_profiles": {}
+    },
+    "retired_group": {
+      "score_policy": {
+        "role_signal_score_threshold": 24,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 9,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.retired_group.pattern.1",
+          "type": "pattern",
+          "pattern": "(保健品|养生课|养老服务|康养项目).{0,12}(返现|分红|补贴|内部名额)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休群体高发: 养老保健返利话术"
+        },
+        {
+          "rule_id": "default.retired_group.pattern.2",
+          "type": "pattern",
+          "pattern": "(儿子|女儿|孙子|孙女|家属).{0,12}(出事|急救|手术|被抓).{0,8}(转账|打钱)",
+          "weight": 22,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休群体高发: 冒充亲属紧急求助"
+        },
+        {
+          "rule_id": "default.retired_group.pattern.3",
+          "type": "pattern",
+          "pattern": "(社保局|民政局|老龄办).{0,12}(补贴|年金|养老金认证).{0,10}(验证码|转账|缴费)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休群体高发: 社保养老金补贴诈骗"
+        },
+        {
+          "rule_id": "default.retired_group.pattern.4",
+          "type": "pattern",
+          "pattern": "(警方|民警|检察院).{0,12}(案件保密|不得告知|全程通话)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休群体高发: 公检法保密控场"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.1",
+          "type": "keyword",
+          "keyword": "养老补贴",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 养老补贴"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.2",
+          "type": "keyword",
+          "keyword": "专家义诊",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 专家义诊"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.3",
+          "type": "keyword",
+          "keyword": "免费体检",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 免费体检"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.4",
+          "type": "keyword",
+          "keyword": "养老床位",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 养老床位"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.5",
+          "type": "keyword",
+          "keyword": "养老金认证",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 养老金认证"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.6",
+          "type": "keyword",
+          "keyword": "民政补助",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 民政补助"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.7",
+          "type": "keyword",
+          "keyword": "高息养老项目",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 高息养老项目"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.8",
+          "type": "keyword",
+          "keyword": "保健讲座",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 保健讲座"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.9",
+          "type": "keyword",
+          "keyword": "神药",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 神药"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.10",
+          "type": "keyword",
+          "keyword": "紧急救治",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 紧急救治"
+        },
+        {
+          "rule_id": "default.retired_group.keyword.11",
+          "type": "keyword",
+          "keyword": "看守所",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 看守所"
+        },
+        {
+          "rule_id": "default.retired_group.combo.1",
+          "type": "combination",
+          "left": "孙子",
+          "right": "转账",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休画像: 孙子+转账组合"
+        },
+        {
+          "rule_id": "default.retired_group.combo.2",
+          "type": "combination",
+          "left": "保健品",
+          "right": "返现",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休画像: 保健品+返现组合"
+        },
+        {
+          "rule_id": "default.retired_group.combo.3",
+          "type": "combination",
+          "left": "养老金",
+          "right": "验证码",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休画像: 养老金+验证码组合"
+        },
+        {
+          "rule_id": "default.retired_group.combo.4",
+          "type": "combination",
+          "left": "民警",
+          "right": "保密",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "退休画像: 民警+保密组合"
+        }
+      ],
+      "role_profiles": {}
+    },
+    "elderly": {
+      "score_policy": {
+        "role_signal_score_threshold": 24,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 9,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.elderly.pattern.1",
+          "type": "pattern",
+          "pattern": "(中奖|抽奖|礼品领取).{0,12}(手续费|税费|保证金)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年高发: 中奖领奖先交费骗局"
+        },
+        {
+          "rule_id": "default.elderly.pattern.2",
+          "type": "pattern",
+          "pattern": "(国库券|高息理财|养老保险升级).{0,12}(充值|转账|打款)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年高发: 养老理财高息诱导"
+        },
+        {
+          "rule_id": "default.elderly.pattern.3",
+          "type": "pattern",
+          "pattern": "(客服|快递).{0,12}(老人优先|绿色通道).{0,10}(验证码|链接|共享屏幕)",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年高发: 绿色通道诱导操作"
+        },
+        {
+          "rule_id": "default.elderly.keyword.1",
+          "type": "keyword",
+          "keyword": "养老诈骗",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 养老诈骗"
+        },
+        {
+          "rule_id": "default.elderly.keyword.2",
+          "type": "keyword",
+          "keyword": "保健讲座",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 保健讲座"
+        },
+        {
+          "rule_id": "default.elderly.keyword.3",
+          "type": "keyword",
+          "keyword": "老年福利",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 老年福利"
+        },
+        {
+          "rule_id": "default.elderly.keyword.4",
+          "type": "keyword",
+          "keyword": "低价旅游",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 低价旅游"
+        },
+        {
+          "rule_id": "default.elderly.keyword.5",
+          "type": "keyword",
+          "keyword": "收藏品回购",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 收藏品回购"
+        },
+        {
+          "rule_id": "default.elderly.keyword.6",
+          "type": "keyword",
+          "keyword": "古董拍卖",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 古董拍卖"
+        },
+        {
+          "rule_id": "default.elderly.keyword.7",
+          "type": "keyword",
+          "keyword": "电信套餐升级",
+          "weight": 8,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 电信套餐升级"
+        },
+        {
+          "rule_id": "default.elderly.keyword.8",
+          "type": "keyword",
+          "keyword": "一键养老",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 一键养老"
+        },
+        {
+          "rule_id": "default.elderly.keyword.9",
+          "type": "keyword",
+          "keyword": "温情关怀",
+          "weight": 8,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 温情关怀"
+        },
+        {
+          "rule_id": "default.elderly.combo.1",
+          "type": "combination",
+          "left": "抽奖",
+          "right": "手续费",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年画像: 抽奖+手续费组合"
+        },
+        {
+          "rule_id": "default.elderly.combo.2",
+          "type": "combination",
+          "left": "收藏品",
+          "right": "回购",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年画像: 收藏品+回购组合"
+        },
+        {
+          "rule_id": "default.elderly.combo.3",
+          "type": "combination",
+          "left": "高息",
+          "right": "养老",
+          "bonus": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年画像: 高息+养老组合"
+        },
+        {
+          "rule_id": "default.elderly.combo.4",
+          "type": "combination",
+          "left": "快递",
+          "right": "验证码",
+          "bonus": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "老年画像: 快递+验证码组合"
+        }
+      ],
+      "role_profiles": {}
+    },
+    "finance_practitioner": {
+      "score_policy": {
+        "role_signal_score_threshold": 30,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 6,
+        "role_signal_requires_transaction": true,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.finance_practitioner.pattern.1",
+          "type": "pattern",
+          "pattern": "(老板|总经理|董事长).{0,12}(对公|公账|公对公).{0,12}(转账|付款)",
+          "weight": 22,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务岗位高发: 冒充领导对公转账"
+        },
+        {
+          "rule_id": "default.finance_practitioner.pattern.2",
+          "type": "pattern",
+          "pattern": "(税务|发票|审计).{0,12}(异常|补税|罚款).{0,10}(转账|缴费)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务岗位高发: 税务发票异常缴费"
+        },
+        {
+          "rule_id": "default.finance_practitioner.pattern.3",
+          "type": "pattern",
+          "pattern": "(供应商|客户).{0,12}(账户变更|收款账户更新|紧急改卡).{0,10}(打款|汇款)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务岗位高发: 供应商账户变更骗局"
+        },
+        {
+          "rule_id": "default.finance_practitioner.pattern.4",
+          "type": "pattern",
+          "pattern": "(财务系统|网银|U盾).{0,12}(授权|验证码|复核).{0,10}(转账|付款)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务岗位高发: 网银授权验证码转账"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.1",
+          "type": "keyword",
+          "keyword": "对公付款",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 对公付款"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.2",
+          "type": "keyword",
+          "keyword": "紧急打款",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 紧急打款"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.3",
+          "type": "keyword",
+          "keyword": "U盾",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: U盾"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.4",
+          "type": "keyword",
+          "keyword": "电子回单",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 电子回单"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.5",
+          "type": "keyword",
+          "keyword": "发票核验",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 发票核验"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.6",
+          "type": "keyword",
+          "keyword": "税务稽查",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 税务稽查"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.7",
+          "type": "keyword",
+          "keyword": "账户变更函",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 账户变更函"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.8",
+          "type": "keyword",
+          "keyword": "付款审批",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 付款审批"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.9",
+          "type": "keyword",
+          "keyword": "收款账户更新",
+          "weight": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 收款账户更新"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.10",
+          "type": "keyword",
+          "keyword": "网银盾",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 网银盾"
+        },
+        {
+          "rule_id": "default.finance_practitioner.keyword.11",
+          "type": "keyword",
+          "keyword": "财务共享中心",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 财务共享中心"
+        },
+        {
+          "rule_id": "default.finance_practitioner.combo.1",
+          "type": "combination",
+          "left": "老板",
+          "right": "对公",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务画像: 老板+对公组合"
+        },
+        {
+          "rule_id": "default.finance_practitioner.combo.2",
+          "type": "combination",
+          "left": "税务",
+          "right": "转账",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务画像: 税务+转账组合"
+        },
+        {
+          "rule_id": "default.finance_practitioner.combo.3",
+          "type": "combination",
+          "left": "供应商",
+          "right": "账户变更",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务画像: 供应商+账户变更组合"
+        },
+        {
+          "rule_id": "default.finance_practitioner.combo.4",
+          "type": "combination",
+          "left": "U盾",
+          "right": "验证码",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务画像: U盾+验证码组合"
+        },
+        {
+          "rule_id": "default.finance_practitioner.combo.5",
+          "type": "combination",
+          "left": "发票",
+          "right": "补税",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "财务画像: 发票+补税组合"
+        }
+      ],
+      "role_profiles": {}
+    },
+    "enterprise_staff": {
+      "score_policy": {
+        "role_signal_score_threshold": 30,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 6,
+        "role_signal_requires_transaction": true,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.enterprise_staff.pattern.1",
+          "type": "pattern",
+          "pattern": "(领导|老板|总监).{0,12}(项目款|合同款|尾款).{0,10}(先付|马上转)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员高发: 冒充领导催促项目合同付款"
+        },
+        {
+          "rule_id": "default.enterprise_staff.pattern.2",
+          "type": "pattern",
+          "pattern": "(OA|企业邮箱|企业微信).{0,12}(审批|指示|保密).{0,10}(转账|付款)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员高发: OA/邮箱伪指令付款"
+        },
+        {
+          "rule_id": "default.enterprise_staff.pattern.3",
+          "type": "pattern",
+          "pattern": "(人事|行政).{0,12}(社保补缴|工资补发|福利领取).{0,10}(验证码|链接)",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员高发: 人事福利验证码诈骗"
+        },
+        {
+          "rule_id": "default.enterprise_staff.pattern.4",
+          "type": "pattern",
+          "pattern": "(IT运维|系统管理员).{0,12}(远程协助|共享屏幕|安装插件)",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员高发: 假冒IT远程协助"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.1",
+          "type": "keyword",
+          "keyword": "OA审批",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: OA审批"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.2",
+          "type": "keyword",
+          "keyword": "企业微信",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 企业微信"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.3",
+          "type": "keyword",
+          "keyword": "领导批示",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 领导批示"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.4",
+          "type": "keyword",
+          "keyword": "项目款",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 项目款"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.5",
+          "type": "keyword",
+          "keyword": "合同款",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 合同款"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.6",
+          "type": "keyword",
+          "keyword": "邮件指令",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 邮件指令"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.7",
+          "type": "keyword",
+          "keyword": "紧急付款",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 紧急付款"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.8",
+          "type": "keyword",
+          "keyword": "审批加急",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 审批加急"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.9",
+          "type": "keyword",
+          "keyword": "跨部门借款",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 跨部门借款"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.10",
+          "type": "keyword",
+          "keyword": "工作群通知",
+          "weight": 8,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 工作群通知"
+        },
+        {
+          "rule_id": "default.enterprise_staff.keyword.11",
+          "type": "keyword",
+          "keyword": "人事补贴",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 人事补贴"
+        },
+        {
+          "rule_id": "default.enterprise_staff.combo.1",
+          "type": "combination",
+          "left": "领导",
+          "right": "项目款",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员画像: 领导+项目款组合"
+        },
+        {
+          "rule_id": "default.enterprise_staff.combo.2",
+          "type": "combination",
+          "left": "OA",
+          "right": "转账",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员画像: OA+转账组合"
+        },
+        {
+          "rule_id": "default.enterprise_staff.combo.3",
+          "type": "combination",
+          "left": "企业邮箱",
+          "right": "付款",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员画像: 企业邮箱+付款组合"
+        },
+        {
+          "rule_id": "default.enterprise_staff.combo.4",
+          "type": "combination",
+          "left": "IT运维",
+          "right": "远程协助",
+          "bonus": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "企业职员画像: IT运维+远程协助组合"
+        }
+      ],
+      "role_profiles": {}
+    },
+    "self_employed": {
+      "score_policy": {
+        "role_signal_score_threshold": 28,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 7,
+        "role_signal_requires_transaction": true,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.self_employed.pattern.1",
+          "type": "pattern",
+          "pattern": "(营业执照|店铺|商户账号).{0,12}(异常|封停|处罚).{0,10}(缴费|转账)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体经营高发: 执照店铺异常缴费"
+        },
+        {
+          "rule_id": "default.self_employed.pattern.2",
+          "type": "pattern",
+          "pattern": "(平台客服|电商客服).{0,12}(保证金|解冻|店铺评级).{0,10}(充值|打款)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体经营高发: 平台客服保证金解冻诈骗"
+        },
+        {
+          "rule_id": "default.self_employed.pattern.3",
+          "type": "pattern",
+          "pattern": "(物流|快递|仓储).{0,12}(丢件|理赔|赔付).{0,10}(验证码|链接|远程)",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体经营高发: 物流理赔链路诈骗"
+        },
+        {
+          "rule_id": "default.self_employed.pattern.4",
+          "type": "pattern",
+          "pattern": "(贷款|经营贷|商户贷).{0,12}(包装流水|手续费|保证金)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体经营高发: 经营贷前置收费"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.1",
+          "type": "keyword",
+          "keyword": "商户冻结",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 商户冻结"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.2",
+          "type": "keyword",
+          "keyword": "店铺违规",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 店铺违规"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.3",
+          "type": "keyword",
+          "keyword": "流水贷款",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 流水贷款"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.4",
+          "type": "keyword",
+          "keyword": "经营贷",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 经营贷"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.5",
+          "type": "keyword",
+          "keyword": "补缴保证金",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 补缴保证金"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.6",
+          "type": "keyword",
+          "keyword": "店铺保证金",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 店铺保证金"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.7",
+          "type": "keyword",
+          "keyword": "订单异常",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 订单异常"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.8",
+          "type": "keyword",
+          "keyword": "货款冻结",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 货款冻结"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.9",
+          "type": "keyword",
+          "keyword": "商家后台",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 商家后台"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.10",
+          "type": "keyword",
+          "keyword": "平台扣分",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 平台扣分"
+        },
+        {
+          "rule_id": "default.self_employed.keyword.11",
+          "type": "keyword",
+          "keyword": "罚单通知",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 罚单通知"
+        },
+        {
+          "rule_id": "default.self_employed.combo.1",
+          "type": "combination",
+          "left": "店铺",
+          "right": "保证金",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体画像: 店铺+保证金组合"
+        },
+        {
+          "rule_id": "default.self_employed.combo.2",
+          "type": "combination",
+          "left": "商户",
+          "right": "解冻",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体画像: 商户+解冻组合"
+        },
+        {
+          "rule_id": "default.self_employed.combo.3",
+          "type": "combination",
+          "left": "经营贷",
+          "right": "手续费",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体画像: 经营贷+手续费组合"
+        },
+        {
+          "rule_id": "default.self_employed.combo.4",
+          "type": "combination",
+          "left": "物流",
+          "right": "理赔",
+          "bonus": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "个体画像: 物流+理赔组合"
+        }
+      ],
+      "role_profiles": {}
+    },
+    "public_officer": {
+      "score_policy": {
+        "role_signal_score_threshold": 30,
+        "role_signal_min_hits": 1,
+        "role_signal_boost_per_hit": 2,
+        "role_signal_max_boost": 6,
+        "role_signal_skip_consultative": true
+      },
+      "structured_rules": [
+        {
+          "rule_id": "default.public_officer.pattern.1",
+          "type": "pattern",
+          "pattern": "(纪委|监委|组织部|保密局).{0,12}(调查|谈话|纪律审查).{0,10}(保密|不得外传)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职人员高发: 假冒纪检调查保密话术"
+        },
+        {
+          "rule_id": "default.public_officer.pattern.2",
+          "type": "pattern",
+          "pattern": "(公安机关|检察院|法院).{0,12}(配合办案|政治审查|涉密审查).{0,10}(下载|共享屏幕|转账)",
+          "weight": 20,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职人员高发: 假冒司法机关涉密审查"
+        },
+        {
+          "rule_id": "default.public_officer.pattern.3",
+          "type": "pattern",
+          "pattern": "(领导|办公室).{0,12}(内部通报|紧急任务|专项资金).{0,10}(汇款|保密)",
+          "weight": 18,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职人员高发: 假冒上级专项资金指令"
+        },
+        {
+          "rule_id": "default.public_officer.pattern.4",
+          "type": "pattern",
+          "pattern": "(纪检|巡视组).{0,12}(问题线索|谈话函询).{0,10}(验证码|材料提交)",
+          "weight": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职人员高发: 假冒纪检函询取证"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.1",
+          "type": "keyword",
+          "keyword": "纪律审查",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 纪律审查"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.2",
+          "type": "keyword",
+          "keyword": "组织调查",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 组织调查"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.3",
+          "type": "keyword",
+          "keyword": "内部通报",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 内部通报"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.4",
+          "type": "keyword",
+          "keyword": "涉密",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 涉密"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.5",
+          "type": "keyword",
+          "keyword": "不得外传",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 不得外传"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.6",
+          "type": "keyword",
+          "keyword": "政治审查",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 政治审查"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.7",
+          "type": "keyword",
+          "keyword": "专项资金",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 专项资金"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.8",
+          "type": "keyword",
+          "keyword": "配合办案",
+          "weight": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 配合办案"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.9",
+          "type": "keyword",
+          "keyword": "谈话函询",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 谈话函询"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.10",
+          "type": "keyword",
+          "keyword": "保密纪律",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 保密纪律"
+        },
+        {
+          "rule_id": "default.public_officer.keyword.11",
+          "type": "keyword",
+          "keyword": "机关财务",
+          "weight": 10,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "?????: 机关财务"
+        },
+        {
+          "rule_id": "default.public_officer.combo.1",
+          "type": "combination",
+          "left": "调查",
+          "right": "保密",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职画像: 调查+保密组合"
+        },
+        {
+          "rule_id": "default.public_officer.combo.2",
+          "type": "combination",
+          "left": "公安机关",
+          "right": "配合办案",
+          "bonus": 16,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职画像: 公安机关+配合办案组合"
+        },
+        {
+          "rule_id": "default.public_officer.combo.3",
+          "type": "combination",
+          "left": "专项资金",
+          "right": "汇款",
+          "bonus": 14,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职画像: 专项资金+汇款组合"
+        },
+        {
+          "rule_id": "default.public_officer.combo.4",
+          "type": "combination",
+          "left": "纪检",
+          "right": "验证码",
+          "bonus": 12,
+          "severity": "soft",
+          "floor_score": 0,
+          "clue": "公职画像: 纪检+验证码组合"
+        }
+      ],
+      "role_profiles": {}
+    }
+  },
+  "score_policy": {
+    "hard_signal_medium_min_hits": 2,
+    "hard_signal_high_min_hits": 3,
+    "hard_signal_medium_floor": 55,
+    "hard_signal_high_floor": 85,
+    "medium_threshold": 40,
+    "high_threshold": 75,
+    "role_signal_score_threshold": 24,
+    "role_signal_min_hits": 1,
+    "role_signal_boost_per_hit": 2,
+    "role_signal_max_boost": 6,
+    "role_signal_requires_transaction": false
+  }
+}

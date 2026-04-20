@@ -14,6 +14,11 @@ from src.evolution.runtime import get_evolution_runtime
 _SHARED_AGENT_LLM: Optional[ChatOpenAI] = None
 
 
+def _normalize_language(language: Optional[str]) -> str:
+    value = (language or "").strip().lower()
+    return "en-US" if value.startswith("en") else "zh-CN"
+
+
 def _get_shared_agent_llm() -> Optional[ChatOpenAI]:
     global _SHARED_AGENT_LLM
     if _SHARED_AGENT_LLM is not None:
@@ -64,15 +69,28 @@ class CozeAgent:
         "build_safety_action_plan": "Generate a concrete anti-fraud action plan for the current request.",
     }
 
-    def __init__(self, user_id: int, user_role: str = "general"):
+    def __init__(self, user_id: int, user_role: str = "general", language: str = "zh-CN"):
         self.user_id = user_id
         self.user_role = normalize_user_role(user_role)
+        self.language = _normalize_language(language)
         self.runtime = get_evolution_runtime()
         self.db_path = Path(__file__).resolve().parents[2] / "fraud_detection.db"
         self.llm = _get_shared_agent_llm()
 
-        self.system_prompt = self._get_system_prompt()
+        self.system_prompt = self._with_language_instruction(self._get_system_prompt())
         self.conversation_history: List[Any] = []
+
+    def _is_english(self) -> bool:
+        return self.language == "en-US"
+
+    def _with_language_instruction(self, prompt: str) -> str:
+        if not self._is_english():
+            return prompt
+        return (
+            f"{prompt}\n\n"
+            "Output language rule: answer in English only. Keep all user-facing text, suggestions, "
+            "safety plans, and explanations in English."
+        )
 
     def _get_system_prompt(self) -> str:
         prompts = {
@@ -110,6 +128,8 @@ class CozeAgent:
 
         messages.extend(self.conversation_history)
         user_content = message
+        if self._is_english():
+            user_content = "Please answer in English only.\n\n" + user_content
         if context:
             user_content += "\n\n上下文:\n" + json.dumps(context, ensure_ascii=False)
         messages.append(HumanMessage(content=user_content))
@@ -152,6 +172,8 @@ class CozeAgent:
 
         messages.extend(self.conversation_history)
         user_content = message
+        if self._is_english():
+            user_content = "Please answer in English only.\n\n" + user_content
         if context:
             user_content += "\n\n上下文:\n" + json.dumps(context, ensure_ascii=False)
         messages.append(HumanMessage(content=user_content))
@@ -270,7 +292,7 @@ class CozeAgent:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
-                SELECT name, phone, contact_relationship, is_guardian
+                SELECT name, phone, email, contact_relationship, is_guardian
                 FROM contacts
                 WHERE user_id = ?
                 ORDER BY is_guardian DESC, created_at DESC
@@ -281,6 +303,7 @@ class CozeAgent:
                 {
                     "name": row["name"],
                     "phone": row["phone"],
+                    "email": row["email"],
                     "relationship": row["contact_relationship"],
                     "is_guardian": bool(row["is_guardian"]),
                 }
@@ -327,6 +350,18 @@ class CozeAgent:
         }
 
     def _lookup_emergency_hotlines(self, message: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        if self._is_english():
+            return {
+                "hotlines": [
+                    {"name": "Police emergency hotline", "phone": "110"},
+                    {"name": "Anti-fraud hotline", "phone": "96110"},
+                ],
+                "tips": [
+                    "If money has been transferred, contact the bank and police immediately.",
+                    "Preserve chat records, transfer receipts, phone numbers, links, and screenshots.",
+                ],
+            }
+
         return {
             "hotlines": [
                 {"name": "公安报警", "phone": "110"},
@@ -339,6 +374,25 @@ class CozeAgent:
         }
 
     def _build_safety_action_plan(self, message: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        if self._is_english():
+            urgent = any(
+                keyword in message.lower()
+                for keyword in ["transfer", "verification code", "remote", "screen share", "bank card", "payment"]
+            )
+            actions = [
+                "Pause transfers, payments, downloads, and screen sharing",
+                "Verify the request through an official phone number, website, or app",
+                "Preserve screenshots, links, phone numbers, and transaction records",
+            ]
+            if urgent:
+                actions.extend(
+                    [
+                        "Contact your guardian or emergency contact immediately",
+                        "Call 110 or 96110 if money or account access is involved",
+                    ]
+                )
+            return {"urgent": urgent, "actions": actions}
+
         urgent = any(keyword in message for keyword in ["转账", "验证码", "下载", "屏幕共享", "银行卡", "付款"])
         actions = [
             "停止继续聊天、转账或提供验证码。",
@@ -358,6 +412,13 @@ class CozeAgent:
         }
 
     def _generate_suggestions(self, user_message: str, bot_response: str) -> List[str]:
+        if self._is_english():
+            return [
+                "Check whether this is a scam",
+                "Build a safety action plan",
+                "Show emergency contacts and hotlines",
+            ]
+
         if any(keyword in user_message for keyword in ["转账", "付款", "银行卡"]):
             return ["帮我判断这条转账要求是否可信", "给我一个立即执行的止损步骤", "需要联系谁比较合适"]
         if any(keyword in user_message for keyword in ["报警", "举报", "维权"]):
@@ -397,6 +458,25 @@ class CozeAgent:
         return chunks
 
     def _build_fallback_response(self, message: str, tool_calls: List[Dict[str, Any]]) -> str:
+        if self._is_english():
+            lines = ["I have reviewed the available context and generated a safety-focused response."]
+            for call in tool_calls:
+                if call["tool"] == "lookup_guardian_contacts":
+                    primary = call["result"].get("primary_guardian")
+                    if primary:
+                        lines.append(f"Primary guardian: {primary['name']}, phone: {primary['phone']}.")
+                if call["tool"] == "lookup_emergency_hotlines":
+                    hotlines = ", ".join(item["phone"] for item in call["result"].get("hotlines", []))
+                    if hotlines:
+                        lines.append(f"Emergency hotlines: {hotlines}.")
+                if call["tool"] == "build_safety_action_plan":
+                    actions = call["result"].get("actions", [])
+                    if actions:
+                        lines.append("Suggested actions: " + "; ".join(str(item) for item in actions[:4]))
+            if len(lines) == 1:
+                lines.append("Pause sensitive actions, verify through official channels, and keep evidence.")
+            return "\n".join(lines)
+
         lines = ["当前无法连接大模型，我先基于本地工具结果给你建议。"]
         for call in tool_calls:
             if call["tool"] == "lookup_guardian_contacts":

@@ -49,6 +49,7 @@ class Contact(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String(100), nullable=False)
     phone = Column(String(20), nullable=False)
+    email = Column(String(100), default="")
     contact_relationship = Column(String(50), default="friend")
     is_guardian = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -76,6 +77,7 @@ class ChatHistory(Base):
 def init_db():
     Base.metadata.create_all(bind=engine)
     _ensure_user_profile_columns()
+    _ensure_contact_columns()
 
 
 def _ensure_user_profile_columns() -> None:
@@ -89,6 +91,21 @@ def _ensure_user_profile_columns() -> None:
         existing_columns = {
             row[1]
             for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()
+        }
+        for column_name, ddl in expected_columns.items():
+            if column_name not in existing_columns:
+                conn.execute(text(ddl))
+
+
+def _ensure_contact_columns() -> None:
+    expected_columns = {
+        "email": "ALTER TABLE contacts ADD COLUMN email VARCHAR(100) DEFAULT ''",
+    }
+
+    with engine.begin() as conn:
+        existing_columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(contacts)")).fetchall()
         }
         for column_name, ddl in expected_columns.items():
             if column_name not in existing_columns:

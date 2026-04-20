@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import '../../../core/utils/emergency_actions.dart';
 import '../../../data/models/detection_result.dart';
+import '../../theme/app_appearance.dart';
+import '../../theme/app_locale.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/markdown_text.dart';
 
@@ -50,6 +53,29 @@ class _ResultPageState extends State<ResultPage> with TickerProviderStateMixin {
   void dispose() {
     _breathingController.dispose();
     super.dispose();
+  }
+
+  Future<void> _dialNumber(String number) async {
+    final ok = await EmergencyActions.dial(number);
+    if (!mounted) return;
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocale.text(
+            '\u65e0\u6cd5\u6253\u5f00\u62e8\u53f7\u5668\uff0c\u8bf7\u624b\u52a8\u62e8\u6253 $number',
+            'Unable to open dialer. Please call $number manually.',
+          )),
+        ),
+      );
+    }
+  }
+
+  void _replayVoiceWarning() {
+    EmergencyActions.speakRiskWarning(
+      riskLevel: widget.result.riskLevel,
+      isEnglish: AppAppearance.instance.isEnglish,
+    );
   }
 
   @override
@@ -383,6 +409,8 @@ class _ResultPageState extends State<ResultPage> with TickerProviderStateMixin {
   }
 
   Widget _buildBottomActions() {
+    final guardianAction = widget.result.guardianCallAction;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: BoxDecoration(
@@ -395,36 +423,73 @@ class _ResultPageState extends State<ResultPage> with TickerProviderStateMixin {
           ],
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () {
-                // 分享功能
-              },
-              icon: const Icon(Icons.share_outlined),
-              label: const Text('分享'),
+      child: SafeArea(
+        top: false,
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _replayVoiceWarning,
+              icon: const Icon(Icons.volume_up_outlined),
+              label: Text(AppLocale.text('\u8bed\u97f3\u8b66\u793a', 'Voice Warning')),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white70,
                 side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton.icon(
+            OutlinedButton.icon(
+              onPressed: () => _dialNumber('96110'),
+              icon: const Icon(Icons.phone_outlined),
+              label: Text(AppLocale.text('\u62e8\u6253 96110', 'Call 96110')),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              ),
+            ),
+            if (widget.result.isHighRisk)
+              ElevatedButton.icon(
+                onPressed: () => _dialNumber('110'),
+                icon: const Icon(Icons.local_police_outlined),
+                label: Text(AppLocale.text('\u62e8\u6253 110', 'Call 110')),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.errorColor,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+            if (guardianAction != null)
+              OutlinedButton.icon(
+                onPressed: () => _dialNumber(guardianAction.value),
+                icon: const Icon(Icons.contact_phone_outlined),
+                label: Text(guardianAction.label.isEmpty
+                    ? AppLocale.text('\u8054\u7cfb\u76d1\u62a4\u4eba', 'Contact Guardian')
+                    : guardianAction.label),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+            ElevatedButton.icon(
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.check),
-              label: const Text('我已了解'),
+              label: Text(AppLocale.text('\u5b8c\u6210', 'Done')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
                 foregroundColor: const Color(0xFF04201C),
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

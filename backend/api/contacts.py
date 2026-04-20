@@ -27,6 +27,7 @@ async def create_contact(
         user_id=current_user.id,
         name=contact_data.name,
         phone=contact_data.phone,
+        email=(contact_data.email or "").strip(),
         relationship=contact_data.relationship,
         is_guardian=contact_data.is_guardian
     )
@@ -40,6 +41,7 @@ async def create_contact(
             id=new_contact.id,
             name=new_contact.name,
             phone=new_contact.phone,
+            email=new_contact.email or "",
             relationship=new_contact.relationship,
             is_guardian=new_contact.is_guardian,
             created_at=new_contact.created_at
@@ -61,6 +63,7 @@ async def get_contacts(
             id=c.id,
             name=c.name,
             phone=c.phone,
+            email=c.email or "",
             relationship=c.relationship,
             is_guardian=c.is_guardian,
             created_at=c.created_at
@@ -91,6 +94,7 @@ async def get_contact(
             id=contact.id,
             name=contact.name,
             phone=contact.phone,
+            email=contact.email or "",
             relationship=contact.relationship,
             is_guardian=contact.is_guardian,
             created_at=contact.created_at
@@ -125,6 +129,8 @@ async def update_contact(
     # 更新字段
     update_data = contact_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
+        if field == "email" and isinstance(value, str):
+            value = value.strip()
         setattr(contact, field, value)
 
     db.commit()
@@ -135,6 +141,7 @@ async def update_contact(
             id=contact.id,
             name=contact.name,
             phone=contact.phone,
+            email=contact.email or "",
             relationship=contact.relationship,
             is_guardian=contact.is_guardian,
             created_at=contact.created_at

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { App, Button, Checkbox, Col, Empty, Form, Input, List, Modal, Popconfirm, Row, Select, Tag } from 'antd';
-import { DeleteOutlined, EditOutlined, PhoneOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, MailOutlined, PhoneOutlined, PlusOutlined } from '@ant-design/icons';
 import { contactsAPI } from '../services/api';
 import { useI18n } from '../i18n';
-import { maskPhone, maskUsername, USER_SETTINGS_CHANGED_EVENT } from '../utils/privacy';
+import { maskEmail, maskPhone, maskUsername, USER_SETTINGS_CHANGED_EVENT } from '../utils/privacy';
 import { storage } from '../utils/storage';
 import type { Contact, ContactCreate } from '../types';
 
@@ -56,7 +56,9 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
     } catch (error) {
       const apiError = error as ApiError;
       const errorMsg =
-        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('加载联系人失败', 'Failed to load contacts');
+        apiError.response?.data?.detail ??
+        apiError.response?.data?.message ??
+        t('加载联系人失败', 'Failed to load contacts');
       message.error(errorMsg);
     } finally {
       setLoading(false);
@@ -86,6 +88,7 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
     form.setFieldsValue({
       name: '',
       phone: '',
+      email: '',
       relationship: 'family',
       is_guardian: false,
     });
@@ -97,6 +100,7 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
     form.setFieldsValue({
       name: contact.name,
       phone: contact.phone,
+      email: contact.email ?? '',
       relationship: contact.relationship,
       is_guardian: contact.is_guardian,
     });
@@ -111,7 +115,9 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
     } catch (error) {
       const apiError = error as ApiError;
       const errorMsg =
-        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('删除联系人失败', 'Failed to delete contact');
+        apiError.response?.data?.detail ??
+        apiError.response?.data?.message ??
+        t('删除联系人失败', 'Failed to delete contact');
       message.error(errorMsg);
     }
   };
@@ -130,7 +136,9 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
     } catch (error) {
       const apiError = error as ApiError;
       const errorMsg =
-        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('保存联系人失败', 'Failed to save contact');
+        apiError.response?.data?.detail ??
+        apiError.response?.data?.message ??
+        t('保存联系人失败', 'Failed to save contact');
       message.error(errorMsg);
     }
   };
@@ -138,33 +146,41 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
   const handleSetGuardian = async (contact: Contact) => {
     try {
       await contactsAPI.updateContact(contact.id, { is_guardian: true });
-      message.success(t('监护联系人已更新', 'Guardian contact updated'));
+      message.success(t('重点联系人已更新', 'Key contact updated'));
       await loadContacts();
     } catch (error) {
       const apiError = error as ApiError;
       const errorMsg =
-        apiError.response?.data?.detail ?? apiError.response?.data?.message ?? t('更新监护联系人失败', 'Failed to update guardian contact');
+        apiError.response?.data?.detail ??
+        apiError.response?.data?.message ??
+        t('更新重点联系人失败', 'Failed to update key contact');
       message.error(errorMsg);
     }
   };
 
   return (
-    <div className="min-h-screen bg-darker ml-[260px] p-6">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="agent-shell ml-[96px] min-h-screen px-8 py-7">
+      <div className="agent-page mx-auto">
+        <div className="agent-page-header">
           <div>
-            <h1 className="text-2xl font-bold text-white">{t('紧急联系人', 'Emergency Contacts')}</h1>
-            <p className="mt-1 text-sm text-gray-400">
-              {t('为高风险预警预先配置可信联系人。', 'Configure trusted contacts for high-risk alerts.')}
+            <div className="page-kicker">Trusted Contacts</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+              {t('可信联系人', 'Trusted Contacts')}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
+              {t(
+                '配置可信联系人，用于高风险提醒、紧急核实和重点联系人联动。',
+                'Configure trusted contacts for high-risk alerts, urgent verification, and key-contact escalation.',
+              )}
             </p>
           </div>
 
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal} className="btn-primary">
+          <Button icon={<PlusOutlined />} onClick={openCreateModal} className="contact-add-button">
             {t('添加联系人', 'Add Contact')}
           </Button>
         </div>
 
-        <div className="card-dark p-4">
+        <div className="contact-list-panel">
           {contacts.length === 0 ? (
             <Empty description={<span className="text-gray-400">{t('暂无联系人', 'No contacts yet')}</span>} />
           ) : (
@@ -172,24 +188,26 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
               loading={loading}
               dataSource={contacts}
               renderItem={(contact) => (
-                <List.Item className="!py-4">
-                  <div className="flex w-full flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center sm:justify-between">
+                <List.Item className="contact-row !mb-3 !px-4 !py-4 last:!mb-0">
+                  <div className="contact-row-layout">
                     <List.Item.Meta
-                      className="mb-0 min-w-[260px] flex-1"
+                      className="contact-meta mb-0 min-w-0"
                       avatar={
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-white font-semibold">
+                        <div className="contact-avatar flex h-10 w-10 items-center justify-center rounded-lg font-semibold">
                           {contact.name.charAt(0).toUpperCase()}
                         </div>
                       }
                       title={
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-white font-medium">{privacyMode ? maskUsername(contact.name) : contact.name}</span>
+                          <span className="font-medium text-white">
+                            {privacyMode ? maskUsername(contact.name) : contact.name}
+                          </span>
                           <Tag color={relationshipTagColors[contact.relationship] ?? 'default'} className="m-0 rounded-full">
                             {relationshipLabels[contact.relationship] ?? contact.relationship}
                           </Tag>
                           {contact.is_guardian ? (
                             <Tag color="red" className="m-0 rounded-full">
-                              {t('监护人', 'Guardian')}
+                              {t('重点联系人', 'Key Contact')}
                             </Tag>
                           ) : (
                             <Button
@@ -197,22 +215,28 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
                               onClick={() => void handleSetGuardian(contact)}
                               className="!h-6 rounded-full border-amber-400/70 bg-amber-500/10 !px-2 text-[12px] !text-amber-200 hover:!border-amber-300 hover:!text-amber-100"
                             >
-                              {t('设为监护人', 'Set as Guardian')}
+                              {t('设为重点联系人', 'Set as Key Contact')}
                             </Button>
                           )}
                         </div>
                       }
                       description={
-                        <div className="flex items-center gap-4 text-gray-400">
-                          <span className="flex items-center gap-1">
+                        <div className="contact-detail-line text-gray-400">
+                          <span className="contact-detail-item">
                             <PhoneOutlined />
                             {privacyMode ? maskPhone(contact.phone) : contact.phone}
                           </span>
+                          {contact.email ? (
+                            <span className="contact-detail-item contact-email">
+                              <MailOutlined />
+                              {privacyMode ? maskEmail(contact.email) : contact.email}
+                            </span>
+                          ) : null}
                         </div>
                       }
                     />
 
-                    <div className="flex w-full items-center justify-start gap-2 sm:w-auto sm:justify-end">
+                    <div className="contact-actions">
                       <Button
                         type="default"
                         icon={<EditOutlined />}
@@ -290,8 +314,16 @@ export default function ContactsPage({ onPageChange: _onPageChange }: ContactsPa
             <Input placeholder="13800000000" />
           </Form.Item>
 
+          <Form.Item
+            label={t('邮箱地址', 'Email Address')}
+            name="email"
+            rules={[{ type: 'email', message: t('请输入有效的邮箱地址', 'Please enter a valid email address') }]}
+          >
+            <Input placeholder="trusted-contact@example.com" />
+          </Form.Item>
+
           <Form.Item name="is_guardian" valuePropName="checked">
-            <Checkbox>{t('将该联系人设为监护人', 'Set this contact as guardian')}</Checkbox>
+            <Checkbox>{t('设为重点联系人', 'Set as key contact')}</Checkbox>
           </Form.Item>
         </Form>
       </Modal>

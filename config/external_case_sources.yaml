@@ -1,0 +1,108 @@
+# External fraud-case sync configuration.
+# Runtime must depend on public web sources and generated knowledge artifacts only.
+# Do not point this file at local reference folders such as:
+# - anti-fraud manuals
+# - locally crawled fraud-case examples
+
+enabled: true
+
+# Sync interval in seconds. Can be overridden by EXTERNAL_CASE_SYNC_INTERVAL_SECONDS.
+interval_seconds: 300
+
+# Minimum cleaned body length. Short pages are ignored after parsing.
+min_content_length: 80
+
+# Deduplication state. Keep it under the generated knowledge artifact tree.
+state_file: config/data/knowledge/import_reports/external_case_sync_state.json
+
+# Cap fingerprint history so the state file cannot grow without bound.
+max_seen_fingerprints: 50000
+
+sources:
+  - name: baidu_anti_fraud_classroom
+    enabled: true
+    type: url
+    url: https://110.baidu.com/fqz/classroom
+    category: case
+    subtype: internet_fraud_case
+    tags:
+      - external_sync
+      - official_reference
+      - baidu_anti_fraud
+
+  - name: sohu_anti_fraud_cases
+    enabled: true
+    type: url
+    url: https://m.sohu.com/a/974086573_121475763/
+    category: case
+    subtype: internet_fraud_case
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - sohu
+
+  - name: supreme_procuratorate_telecom_fraud
+    enabled: true
+    type: url
+    url: https://www.spp.gov.cn/spp/dxwlzp2021/index.shtml
+    category: case
+    subtype: telecom_network_fraud_case
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - procuratorate
+
+  - name: guangxi_anti_fraud_publicity
+    enabled: true
+    type: url
+    url: http://www.gxzf.gov.cn/zt/jd/tszfbznl/fzal/
+    category: case
+    subtype: internet_fraud_case
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - government_site
+
+  - name: sogou_wechat_anti_fraud_search
+    enabled: true
+    type: url
+    url: https://weixin.sogou.com/weixin?query=%E5%8F%8D%E8%AF%88&type=2
+    category: case
+    subtype: internet_fraud_case
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - wechat_search
+
+  - name: npc_anti_telecom_fraud_law
+    enabled: true
+    type: url
+    url: http://www.npc.gov.cn/npc/c2/c30834/202209/t20220902_319186.html
+    category: law
+    subtype: anti_telecom_fraud_law
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - npc
+
+  - name: supreme_court_telecom_fraud_cases
+    enabled: true
+    type: url
+    url: https://www.court.gov.cn/zixun/xiangqing/490051.html
+    category: case
+    subtype: telecom_fraud_cases
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - supreme_court
+
+  - name: supreme_court_livelihood_fraud_cases
+    enabled: true
+    type: url
+    url: https://www.court.gov.cn/zixun/xiangqing/482861.html
+    category: case
+    subtype: livelihood_fraud_cases
+    tags:
+      - external_sync
+      - official_requirement_reference
+      - supreme_court

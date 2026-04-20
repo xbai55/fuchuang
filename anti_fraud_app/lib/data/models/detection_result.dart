@@ -6,6 +6,8 @@ class DetectionResult {
   final String warningMessage;
   final String finalReport;
   final bool guardianAlert;
+  final List<String> actionItems;
+  final List<EscalationAction> escalationActions;
 
   DetectionResult({
     required this.riskScore,
@@ -14,6 +16,8 @@ class DetectionResult {
     required this.warningMessage,
     required this.finalReport,
     required this.guardianAlert,
+    this.actionItems = const [],
+    this.escalationActions = const [],
   });
 
   factory DetectionResult.fromJson(Map<String, dynamic> json) {
@@ -24,7 +28,32 @@ class DetectionResult {
       warningMessage: json['warning_message'] as String? ?? '',
       finalReport: json['final_report'] as String? ?? '',
       guardianAlert: json['guardian_alert'] as bool? ?? false,
+      actionItems: _parseStringList(json['action_items']),
+      escalationActions: _parseEscalationActions(json['escalation_actions']),
     );
+  }
+
+  static List<String> _parseStringList(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static List<EscalationAction> _parseEscalationActions(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+
+    return value
+        .whereType<Map>()
+        .map((item) => EscalationAction.fromJson(Map<String, dynamic>.from(item)))
+        .where((item) => item.value.isNotEmpty)
+        .toList(growable: false);
   }
 
   /// 是否为高风险
@@ -35,6 +64,19 @@ class DetectionResult {
 
   /// 是否为低风险
   bool get isLowRisk => riskLevel == 'low';
+
+  EscalationAction? get guardianCallAction {
+    for (final action in escalationActions) {
+      final type = action.type.toLowerCase();
+      if ((type.contains('guardian') ||
+              type.contains('contact') ||
+              type.contains('phone')) &&
+          action.hasCallablePhone) {
+        return action;
+      }
+    }
+    return null;
+  }
 
   /// 获取风险等级显示文本
   String get riskLevelText {
@@ -63,4 +105,28 @@ class DetectionResult {
         return '#888888';
     }
   }
+}
+
+class EscalationAction {
+  final String type;
+  final String label;
+  final String value;
+
+  const EscalationAction({
+    required this.type,
+    required this.label,
+    required this.value,
+  });
+
+  factory EscalationAction.fromJson(Map<String, dynamic> json) {
+    return EscalationAction(
+      type: json['type']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      value: json['value']?.toString() ?? '',
+    );
+  }
+
+  String get phoneNumber => value.replaceAll(RegExp(r'[^\d+]'), '');
+
+  bool get hasCallablePhone => !value.contains('@') && phoneNumber.length >= 3;
 }

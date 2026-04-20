@@ -5,7 +5,12 @@ from typing import Any, Dict, List, Optional
 
 from src.core.interfaces import LLMClient
 from src.core.models import GlobalState, Intervention, RiskLevel
-from src.core.utils import format_role_profile_text, load_node_config, normalize_user_role
+from src.core.utils import (
+    build_role_prompt_guidance,
+    format_role_profile_text,
+    load_node_config,
+    normalize_user_role,
+)
 
 
 class AlertGenerator:
@@ -18,6 +23,7 @@ class AlertGenerator:
     DEFAULT_USER_TEMPLATE = (
         "User role: {user_role}\n"
         "Role profile:\n{role_profile}\n"
+        "Role-specific guidance:\n{role_prompt_guidance}\n"
         "Combined profile:\n{combined_profile}\n"
         "Guardian: {guardian_name}\n"
         "Short-term memory: {short_term_memory_summary}\n"
@@ -40,12 +46,13 @@ class AlertGenerator:
                 self.llm = None
 
     async def generate(self, state: GlobalState) -> Intervention:
+        language = self._get_language(state)
         context = self._build_context(state)
         if self.llm is not None:
             try:
                 response = await self.llm.achat(
-                    system_prompt=self.system_prompt,
-                    user_prompt=self.user_template.format(**context),
+                    system_prompt=self._build_system_prompt(language),
+                    user_prompt=self._build_user_prompt(context, language),
                     parse_json=True,
                 )
                 if response.parsed_json:
@@ -54,15 +61,40 @@ class AlertGenerator:
                 print(f"[alert_generator] llm generation failed: {exc}")
         return self._fallback_intervention(state)
 
+    def _get_language(self, state: GlobalState) -> str:
+        metadata = state.workflow_metadata or {}
+        language = str(metadata.get("language") or metadata.get("ui_language") or "zh-CN").strip()
+        return "en-US" if language.lower().startswith("en") else "zh-CN"
+
+    def _is_english(self, language: str) -> bool:
+        return language == "en-US"
+
+    def _build_system_prompt(self, language: str) -> str:
+        if not self._is_english(language):
+            return self.system_prompt
+        return (
+            f"{self.system_prompt}\n"
+            "Output language rule: all user-facing JSON string values must be English only. "
+            "Keep JSON keys unchanged. Do not output Chinese warning text, action items, or escalation labels."
+        )
+
+    def _build_user_prompt(self, context: Dict[str, Any], language: str) -> str:
+        prompt = self.user_template.format(**context)
+        if self._is_english(language):
+            prompt += "\nReturn warning_message, alert_reason, action_items, and escalation action labels in English only.\n"
+        return prompt
+
     def _build_context(self, state: GlobalState) -> Dict[str, Any]:
         risk = state.risk_assessment
         clues = risk.clues if risk and risk.clues else []
         normalized_role = normalize_user_role(state.user_context.user_role.value)
+        language = self._get_language(state)
         combined_profile = str((state.workflow_metadata or {}).get("combined_profile_text") or "none")
         return {
             "input_text": state.get_combined_text() or "",
             "user_role": normalized_role,
             "role_profile": format_role_profile_text(normalized_role),
+            "role_prompt_guidance": build_role_prompt_guidance(normalized_role, language),
             "combined_profile": combined_profile,
             "guardian_name": state.user_context.guardian_name or "not_set",
             "risk_score": risk.score if risk else 0,
@@ -105,10 +137,17 @@ class AlertGenerator:
             escalation_actions=escalation_actions,
         )
         if not intervention.escalation_actions:
-            intervention.escalation_actions = self._build_escalation_actions(state, intervention.guardian_alert)
+            intervention.escalation_actions = self._build_escalation_actions(
+                state,
+                intervention.guardian_alert,
+                language=self._get_language(state),
+            )
         return intervention
 
     def _fallback_intervention(self, state: GlobalState) -> Intervention:
+        if self._is_english(self._get_language(state)):
+            return self._fallback_intervention_en(state)
+
         risk = state.risk_assessment
         if not risk:
             return Intervention(
@@ -140,7 +179,93 @@ class AlertGenerator:
             escalation_actions=self._build_escalation_actions(state, guardian_alert),
         )
 
-    def _build_escalation_actions(self, state: GlobalState, guardian_alert: bool) -> List[Dict[str, str]]:
+    def _fallback_intervention_en(self, state: GlobalState) -> Intervention:
+        risk = state.risk_assessment
+        if not risk:
+            return Intervention(
+                warning_message=(
+                    "The risk engine did not return a complete assessment. "
+                    "Pause sensitive actions until the content is verified."
+                ),
+                guardian_alert=False,
+                alert_reason="No risk assessment was available.",
+                action_items=[
+                    "Do not transfer money or share verification codes",
+                    "Verify the request through an official channel",
+                ],
+                escalation_actions=self._build_escalation_actions(state, False, language="en-US"),
+            )
+
+        guardian_alert = risk.level == RiskLevel.HIGH and bool(
+            state.user_context.guardian_name or state.user_context.guardian_phone or state.user_context.emergency_contacts
+        )
+
+        if risk.level == RiskLevel.LOW:
+            warning = "No clear high-risk fraud indicator was detected, but continue to verify unusual requests."
+            actions = [
+                "Keep the conversation in official channels",
+                "Do not click suspicious links or install unknown apps",
+                "Avoid sharing identity documents, passwords, or verification codes",
+            ]
+        elif risk.level == RiskLevel.MEDIUM:
+            warning = (
+                f"Suspicious fraud indicators were detected"
+                f"{f' ({risk.scam_type})' if risk.scam_type else ''}. Verify before taking any action."
+            )
+            actions = [
+                "Pause payment or account operations",
+                "Verify the identity through an official phone number or app",
+                "Preserve screenshots, audio, video, and chat records",
+            ]
+        else:
+            warning = (
+                f"High-risk fraud indicators were detected"
+                f"{f' ({risk.scam_type})' if risk.scam_type else ''}. Stop the interaction immediately."
+            )
+            actions = [
+                "Stop transfers, downloads, screen sharing, and code sharing immediately",
+                "Call 110 or 96110 if money or account access is involved",
+                "Notify a guardian or trusted emergency contact",
+                "Preserve all evidence before deleting any message",
+            ]
+
+        return Intervention(
+            warning_message=warning,
+            guardian_alert=guardian_alert,
+            alert_reason=f"Risk score {risk.score}/100 with level {risk.level.value}.",
+            action_items=actions,
+            escalation_actions=self._build_escalation_actions(state, guardian_alert, language="en-US"),
+        )
+
+    def _build_escalation_actions(
+        self,
+        state: GlobalState,
+        guardian_alert: bool,
+        language: str = "zh-CN",
+    ) -> List[Dict[str, str]]:
+        if self._is_english(language):
+            actions = [
+                {"type": "hotline", "label": "Call 110", "value": "110"},
+                {"type": "hotline", "label": "Call anti-fraud hotline 96110", "value": "96110"},
+            ]
+            if guardian_alert and (state.user_context.guardian_name or state.user_context.guardian_phone):
+                actions.append(
+                    {
+                        "type": "guardian",
+                        "label": state.user_context.guardian_name or "Guardian",
+                        "value": state.user_context.guardian_phone or "",
+                    }
+                )
+            for contact in state.user_context.emergency_contacts[:3]:
+                actions.append(
+                    {
+                        "type": "contact",
+                        "label": contact.name or "Emergency contact",
+                        "value": contact.phone or "",
+                    }
+                )
+            return actions
+
         actions = [
             {"type": "hotline", "label": "拨打 110", "value": "110"},
             {"type": "hotline", "label": "反诈专线 96110", "value": "96110"},

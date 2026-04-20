@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { storage } from './utils/storage';
+import { APP_NAME, APP_NAME_EN } from './utils/brand';
 
 export type Language = 'zh-CN' | 'en-US';
 
@@ -40,7 +41,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language);
     document.documentElement.lang = language;
-    document.title = language === 'zh-CN' ? '反诈预警系统' : 'Anti-fraud Alert System';
+    document.title = language === 'zh-CN' ? APP_NAME : APP_NAME_EN;
 
     const currentUser = storage.getUser();
     if (currentUser && currentUser.language !== language) {

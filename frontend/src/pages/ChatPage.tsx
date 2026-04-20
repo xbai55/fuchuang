@@ -7,6 +7,10 @@ import { agentAPI, fraudAPI } from '../services/api';
 import { useI18n } from '../i18n';
 import { maskText, USER_SETTINGS_CHANGED_EVENT } from '../utils/privacy';
 import { storage } from '../utils/storage';
+import { APP_NAME, BRAND_LOGO_SRC } from '../utils/brand';
+import { openOfficialPoliceHelpPage, triggerVoiceWarning } from '../utils/emergencyActions';
+import FraudAlertModal from '../components/FraudAlertModal';
+import { buildFraudAlertPayload, shouldShowFraudAlert, shouldTriggerFraudVoiceAlert } from '../utils/fraudPopup';
 import type {
   AgentChatResponse,
   AgentTask,
@@ -54,7 +58,7 @@ type ApiError = {
 
 export default function ChatPage() {
   const { message } = App.useApp();
-  const { isZh } = useI18n();
+  const { isZh, language } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatMode, setChatMode] = useState<ChatMode>('fraud');
   const [history, setHistory] = useState<ChatHistory[]>([]);
@@ -72,6 +76,8 @@ export default function ChatPage() {
   const [privacyMode, setPrivacyMode] = useState<boolean>(() => storage.getUser()?.privacy_mode ?? false);
   const [inputDropActive, setInputDropActive] = useState(false);
   const [expandedDetailMap, setExpandedDetailMap] = useState<Record<string, boolean>>({});
+  const [postAlertOpen, setPostAlertOpen] = useState(false);
+  const [postAlertResponse, setPostAlertResponse] = useState<FraudDetectionResponse | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const taskSocketRef = useRef<WebSocket | null>(null);
   const streamMessageIndexRef = useRef<number | null>(null);
@@ -147,6 +153,26 @@ export default function ChatPage() {
       return normalized;
     }
     return undefined;
+  };
+
+  const getPostVoiceWarningText = (response: FraudDetectionResponse) => {
+    if (response.warning_message) {
+      return response.warning_message;
+    }
+    if (response.risk_level === 'high') {
+      return t(
+        '检测到高风险。请立即停止转账、屏幕共享和验证码提供，并联系可信联系人或拨打 96110。',
+        'High risk detected. Stop transfers, screen sharing, and verification code sharing, then contact a trusted contact or call 96110.',
+      );
+    }
+    return t(
+      '\u68c0\u6d4b\u5230\u98ce\u9669\u3002\u8bf7\u6682\u505c\u64cd\u4f5c\uff0c\u5148\u6838\u5b9e\u5bf9\u65b9\u8eab\u4efd\u3002',
+      'Risk was detected. Pause the operation and verify the other party first.',
+    );
+  };
+
+  const triggerPostVoiceWarning = (response: FraudDetectionResponse) => {
+    triggerVoiceWarning(getPostVoiceWarningText(response), language);
   };
 
   const trimForContext = (content: string, maxLength: number = 500) => {
@@ -280,7 +306,7 @@ export default function ChatPage() {
       `- ${t('风险等级', 'Risk Level')}: **${getRiskBadgeText(response.risk_level)}**`,
       `- ${t('风险分数', 'Risk Score')}: **${response.risk_score}/100**`,
       `- ${t('疑似类型', 'Suspected Type')}: **${suspectedType}**`,
-      `- ${t('监护预警', 'Guardian Alert')}: **${response.guardian_alert ? t('已触发', 'Triggered') : t('未触发', 'Not Triggered')}**`,
+      `- ${t('可信联系人联动', 'Trusted Contact Alert')}: **${response.guardian_alert ? t('已触发', 'Triggered') : t('未触发', 'Not Triggered')}**`,
       '',
       `### ${t('关键提醒', 'Key Warning')}`,
       warning,
@@ -815,6 +841,14 @@ export default function ChatPage() {
       return cleaned;
     });
 
+    if (shouldShowFraudAlert(response)) {
+      setPostAlertResponse(response);
+      setPostAlertOpen(true);
+      if (shouldTriggerFraudVoiceAlert(response)) {
+        triggerPostVoiceWarning(response);
+      }
+    }
+
     resetStreamingState();
   };
 
@@ -832,11 +866,27 @@ export default function ChatPage() {
       risk_score: result.risk_score,
       llm_risk_score: result.llm_risk_score,
       llm_risk_score_available: result.llm_risk_score_available,
+      score_source: result.score_source,
+      early_warning_score: result.early_warning_score,
+      early_warning_level: result.early_warning_level,
       risk_level: result.risk_level as 'low' | 'medium' | 'high',
       scam_type: result.scam_type ?? '',
+      risk_clues: result.risk_clues,
+      matched_rule_ids: result.matched_rule_ids,
+      hard_rule_ids: result.hard_rule_ids,
+      soft_rule_ids: result.soft_rule_ids,
+      matched_spans: result.matched_spans,
+      source_priority: result.source_priority,
+      popup_severity: result.popup_severity,
+      critical_guardrail_triggered: result.critical_guardrail_triggered,
+      score_breakdown: result.score_breakdown,
       warning_message: result.warning_message ?? '',
       final_report: result.final_report ?? '',
       guardian_alert: Boolean(result.guardian_alert),
+      alert_reason: result.alert_reason,
+      action_items: result.action_items,
+      escalation_actions: result.escalation_actions,
+      guardian_notification: result.guardian_notification,
       performance_timing: result.performance_timing,
     };
   };
@@ -1089,7 +1139,9 @@ export default function ChatPage() {
   };
 
   const showEarlyWarningPopup = (earlyWarning?: FraudEarlyWarning | null) => {
-    if (!earlyWarning?.warning_message) {
+    const popupSeverity = earlyWarning?.popup_severity
+      ?? (earlyWarning?.risk_level === 'high' ? 'blocking' : earlyWarning?.risk_level === 'medium' ? 'soft' : 'none');
+    if (!earlyWarning?.warning_message || popupSeverity === 'none') {
       return;
     }
 
@@ -1105,7 +1157,11 @@ export default function ChatPage() {
         ? t('先暂停操作，通过官方渠道核验。', 'Pause and verify through official channels first.')
         : t('保持谨慎，等待完整报告。', 'Stay cautious and wait for the full report.');
     const content = `${t('预警分数', 'Risk Estimate')}: ${earlyWarning.risk_score}/100 (${getRiskBadgeText(earlyWarning.risk_level)})。${scoreAction} ${localizeFraudEnglishContent(earlyWarning.warning_message)}${clueText}`;
-    const popupType = earlyWarning.risk_level === 'low' ? 'info' : 'warning';
+    const popupType = popupSeverity === 'blocking'
+      ? 'error'
+      : earlyWarning.risk_level === 'low'
+        ? 'info'
+        : 'warning';
     const popupKey = `fraud-early-warning-${Date.now()}`;
     earlyWarningMessageKeyRef.current = popupKey;
 
@@ -1113,8 +1169,12 @@ export default function ChatPage() {
       key: popupKey,
       type: popupType,
       content,
-      duration: 0,
+      duration: popupSeverity === 'blocking' ? 0 : 6,
     });
+
+    if (popupSeverity === 'blocking') {
+      triggerVoiceWarning(localizeFraudEnglishContent(earlyWarning.warning_message), language);
+    }
   };
 
   const handleSend = async () => {
@@ -1175,6 +1235,7 @@ export default function ChatPage() {
             ),
             source: 'frontend_fallback',
             is_preliminary: true,
+            popup_severity: 'none',
           },
         );
         appendEarlyWarningMessage(
@@ -1187,6 +1248,7 @@ export default function ChatPage() {
             ),
             source: 'frontend_fallback',
             is_preliminary: true,
+            popup_severity: 'none',
           },
         );
 
@@ -1212,7 +1274,7 @@ export default function ChatPage() {
         closeEarlyWarningPopup();
 
         if (response.guardian_alert) {
-          message.warning(t('该结果已触发监护预警', 'Guardian alert has been triggered'));
+          message.warning(t('该结果已触发可信联系人联动', 'Trusted contact alert has been triggered'));
         }
 
         clearFiles();
@@ -1849,23 +1911,26 @@ export default function ChatPage() {
     blockquote: ({ children }: { children?: ReactNode }) => <blockquote className="mb-1 border-l-2 border-gray-600 pl-3 text-gray-300">{children}</blockquote>,
   };
 
+  const postAlertPayload = postAlertResponse ? buildFraudAlertPayload(postAlertResponse) : null;
+
   return (
-    <Layout className="bg-darker min-h-screen">
-      <Content className="ml-[260px] p-6">
-        <div className="mx-auto flex h-[calc(100vh-48px)] max-w-5xl gap-6">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="mb-4 flex items-center justify-between">
+    <Layout className="agent-shell min-h-screen">
+      <Content className="agent-content ml-[96px]">
+        <div className="agent-layout mx-auto">
+          <div className="agent-main-column">
+            <div className="agent-header">
               <div>
-                <h1 className="text-2xl font-bold text-white">
+                <div className="page-kicker">{isFraudMode ? 'Risk Engine' : 'Agent'}</div>
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
                   {isFraudMode ? t('风险识别对话', 'Risk Analysis Chat') : t('智能助理对话', 'Agent Chat')}
                 </h1>
-                <p className="mt-1 text-sm text-gray-400">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
                   {isFraudMode
                     ? t('粘贴可疑内容或上传媒体文件进行分析。', 'Paste suspicious content or upload media for analysis.')
                     : t('与智能助理直接对话，获取防骗建议与解释。', 'Chat with the assistant for anti-scam guidance and explanations.')}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="agent-controls">
                 <Segmented
                   value={chatMode}
                   onChange={handleModeChange}
@@ -1888,21 +1953,32 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="card-dark mb-4 flex-1 overflow-y-auto p-4">
+            <div className={`agent-thread flex-1 ${messages.length === 0 && !loading ? 'agent-thread-empty' : ''}`}>
               {messages.length === 0 && !loading ? (
-                <div className="flex h-full items-center justify-center">
-                  <Empty
-                    description={
-                      <span className="text-gray-400">
-                        {isFraudMode
-                          ? t('开始对话后，分析结果会显示在这里', 'Analysis results will appear here after you start a chat')
-                          : t('开始提问后，助理回复会显示在这里', 'Assistant replies will appear here after you send a question')}
-                      </span>
-                    }
-                  />
+                <div className="agent-empty-state">
+                  <div className="agent-empty-mark">
+                    <img src={BRAND_LOGO_SRC} alt={APP_NAME} />
+                  </div>
+                  <h2>{isFraudMode ? t(APP_NAME, 'Risk Analysis') : t('\u667a\u80fd\u52a9\u624b', 'Agent Chat')}</h2>
+                  <p>
+                    {isFraudMode
+                      ? t('\u7c98\u8d34\u53ef\u7591\u5185\u5bb9\u6216\u4e0a\u4f20\u5a92\u4f53\u6587\u4ef6\uff0c\u5f00\u59cb\u98ce\u9669\u5206\u6790\u3002', 'Paste suspicious content or upload media to start a risk analysis.')
+                      : t('\u63d0\u51fa\u95ee\u9898\uff0c\u83b7\u53d6\u53cd\u8bc8\u5efa\u8bae\u548c\u89e3\u91ca\u3002', 'Ask a question to get anti-scam guidance and explanations.')}
+                  </p>
+                  <div className="agent-empty-prompts">
+                    <Button onClick={() => setInputText(t('\u6211\u60f3\u5224\u65ad\u4e00\u6bb5\u5185\u5bb9\u662f\u5426\u5b58\u5728\u98ce\u9669\uff0c\u5185\u5bb9\u662f\uff1a', 'I want to check whether this content has risk:'))}>
+                      {t('\u7c98\u8d34\u5185\u5bb9\u6838\u5b9e', 'Check pasted content')}
+                    </Button>
+                    <Button onClick={() => setInputText(t('\u5bf9\u65b9\u8981\u6c42\u6211\u5b8c\u6210\u4e00\u4e9b\u64cd\u4f5c\uff0c\u6211\u60f3\u5148\u6838\u5b9e\u662f\u5426\u5b89\u5168\uff1a', 'Someone asked me to take some actions, and I want to verify whether they are safe:'))}>
+                      {t('\u64cd\u4f5c\u8981\u6c42\u6838\u5b9e', 'Check requested action')}
+                    </Button>
+                    <Button onClick={() => setInputText(t('\u6211\u6709\u804a\u5929\u8bb0\u5f55\u3001\u94fe\u63a5\u6216\u8f6c\u8d26\u76f8\u5173\u4fe1\u606f\uff0c\u60f3\u8bf7\u4f60\u7efc\u5408\u5224\u65ad\u98ce\u9669\uff1a', 'I have chat records, links, or payment-related context and want a combined risk judgment:'))}>
+                      {t('\u8865\u5145\u80cc\u666f\u4fe1\u606f', 'Add context')}
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="agent-message-stack">
                   {selectedHistory && isFraudMode ? (
                     <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
                       <div className="text-xs font-medium text-amber-100">
@@ -1925,9 +2001,12 @@ export default function ChatPage() {
                     const detailExpanded = msg.detailStreaming || Boolean(expandedDetailMap[detailKey]);
 
                     return (
-                    <div key={`${msg.type}-${index}`} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      key={`${msg.type}-${index}`}
+                      className={`agent-message-row ${msg.type === 'user' ? 'agent-message-row-user' : 'agent-message-row-bot'}`}
+                    >
                       <div
-                        className={`min-w-0 max-w-[80%] break-words ${msg.type === 'user' ? 'message-user' : 'message-bot'} ${
+                        className={`min-w-0 break-words ${msg.type === 'user' ? 'message-user' : 'message-bot'} ${
                           msg.type === 'bot' && msg.mode === 'fraud' ? 'fraud-message-box' : ''
                         }`}
                       >
@@ -2026,7 +2105,7 @@ export default function ChatPage() {
                             ) : null}
                             {msg.guardianAlert ? (
                               <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-red-400">
-                                {t('已触发监护预警', 'Guardian alert triggered')}
+                                {t('已触发可信联系人联动', 'Trusted contact alert triggered')}
                               </div>
                             ) : null}
                             {msg.mode === 'fraud' && msg.performanceTiming ? (
@@ -2053,13 +2132,13 @@ export default function ChatPage() {
                     );
                   })}
                   {loading ? (
-                    <div className="flex justify-start">
+                    <div className="agent-message-row agent-message-row-bot">
                       <div className="message-bot">
                         <Spin size="small" />
                         <span className="ml-2 text-gray-400">
                           {isFraudMode
                             ? taskProgress !== null
-                              ? t(`分析中（${taskProgress}%）`, `Analyzing (${taskProgress}%)`)
+                              ? t(`Analyzing (${taskProgress}%)`, `Analyzing (${taskProgress}%)`)
                               : t('分析中...', 'Analyzing...')
                             : t('助理思考中...', 'Assistant is thinking...')}
                         </span>
@@ -2072,7 +2151,7 @@ export default function ChatPage() {
             </div>
 
             <div
-              className={`card-dark p-4 transition-all duration-150 ${inputDropActive ? 'ring-2 ring-cyan-400/70 ring-offset-0' : ''}`}
+              className={`agent-composer transition-all duration-150 ${inputDropActive ? 'ring-2 ring-cyan-400/70 ring-offset-0' : ''}`}
               onDragEnter={handleInputDragEnter}
               onDragOver={handleInputDragOver}
               onDragLeave={handleInputDragLeave}
@@ -2085,7 +2164,29 @@ export default function ChatPage() {
                     : t('当前模式仅支持文本输入，若需上传文件请切换到反诈分析。', 'Current mode supports text only. Switch to fraud analysis to upload files.')}
                 </div>
               ) : null}
+              <div
+                className="agent-primary-input"
+                onDragEnter={handleInputDragEnter}
+                onDragOver={handleInputDragOver}
+                onDragLeave={handleInputDragLeave}
+                onDrop={handleInputDrop}
+              >
+                <TextArea
+                  value={inputText}
+                  onChange={(event) => setInputText(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    isFraudMode
+                      ? t('\u8bf7\u63cf\u8ff0\u53d1\u751f\u4e86\u4ec0\u4e48\uff0c\u7c98\u8d34\u53ef\u7591\u6d88\u606f\uff0c\u6216\u8865\u5145\u4e0a\u4f20\u5a92\u4f53\u7684\u80cc\u666f\u3002', 'Describe what happened, paste suspicious messages, or add context for uploaded media.')
+                      : t('\u8bf7\u8f93\u5165\u4f60\u60f3\u54a8\u8be2\u7684\u95ee\u9898\uff0c\u4f8b\u5982\u201c\u8fd9\u6761\u6d88\u606f\u53ef\u4fe1\u5417\uff1f\u201d', 'Ask anything, such as "Is this message trustworthy?"')
+                  }
+                  autoSize={{ minRows: 3, maxRows: 6 }}
+                  className="agent-textarea"
+                  disabled={loading}
+                />
+              </div>
               <Tabs
+                className="agent-composer-tabs"
                 activeKey={activeTab}
                 onChange={setActiveTab}
                 items={[
@@ -2109,7 +2210,7 @@ export default function ChatPage() {
                               : t('请输入你想咨询的问题，例如“这条短信可信吗？”', 'Ask anything, such as "Is this message trustworthy?"')
                           }
                           autoSize={{ minRows: 3, maxRows: 6 }}
-                          className="bg-dark-lighter border-gray-700 text-white"
+                          className="agent-textarea"
                           disabled={loading}
                         />
                       </div>
@@ -2163,8 +2264,8 @@ export default function ChatPage() {
                 ]}
               />
 
-              <div className="mt-3 flex items-center justify-between">
-                <div className="text-sm text-gray-400">
+              <div className="agent-composer-footer">
+                <div className="min-w-0 flex-1 text-sm text-gray-400">
                   {isFraudMode ? (
                     <>
                       {audioFile ? <span className="mr-3">{t('音频', 'Audio')}: {audioFile.name}</span> : null}
@@ -2189,8 +2290,8 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="hidden h-full w-80 shrink-0 lg:block">
-            <div className="card-dark flex h-full flex-col overflow-hidden p-4">
+          <div className="agent-history-column hidden xl:block">
+            <div className="agent-history-panel">
               <div className="mb-4 flex shrink-0 items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold text-white">{t('最近记录', 'Recent Records')}</h2>
                 <Popconfirm
@@ -2222,9 +2323,7 @@ export default function ChatPage() {
                       return (
                         <div
                           key={item.id}
-                          className={`rounded-lg border bg-dark-lighter p-3 ${
-                            selectedHistory?.id === item.id ? 'border-primary/80' : 'border-gray-800'
-                          }`}
+                          className={`history-item p-3 ${selectedHistory?.id === item.id ? 'history-item-active' : ''}`}
                         >
                           <div className="mb-1 text-xs uppercase tracking-wide text-gray-500">
                             {historyMode === 'agent'
@@ -2281,6 +2380,27 @@ export default function ChatPage() {
           </div>
         </div>
       </Content>
+      <FraudAlertModal
+        open={postAlertOpen}
+        alert={postAlertPayload}
+        onClose={() => setPostAlertOpen(false)}
+        onAcknowledge={() => setPostAlertOpen(false)}
+        onViewReport={() => {
+          message.info(t('\u62a5\u544a\u5df2\u5728\u804a\u5929\u5185\u5bb9\u4e2d\u5c55\u793a\u3002', 'The report is already shown in the chat.'));
+        }}
+        onSeekHelp={() => {
+          openOfficialPoliceHelpPage();
+          message.warning(
+            t(
+              '\u5df2\u6253\u5f00\u516c\u5b89\u90e8\u5b98\u65b9\u7f51\u7edc\u8fdd\u6cd5\u72af\u7f6a\u4e3e\u62a5\u9875\u9762\uff0c\u7d27\u6025\u60c5\u51b5\u8bf7\u76f4\u63a5\u62e8\u6253 110\u3002',
+              'Opened the official Ministry of Public Security reporting page. In an emergency, call 110 directly.',
+            ),
+          );
+        }}
+        onContactGuardian={() => {
+          message.warning(t('请尽快联系可信联系人或拨打 96110 核实处置。', 'Contact a trusted contact or call 96110 for help.'));
+        }}
+      />
     </Layout>
   );
 }

@@ -41,7 +41,25 @@ class CaseIngestor:
             knowledge_service: Optional KnowledgeSearchService instance
         """
         self.knowledge_service = knowledge_service
+        self._service_init_error: Optional[str] = None
         self._ingestion_log: List[Dict[str, Any]] = []
+
+    def _create_knowledge_service(self) -> Optional["KnowledgeSearchService"]:
+        """Create default knowledge service for real ingestion."""
+        try:
+            from src.brain.knowledge_search import KnowledgeSearchService
+
+            self._service_init_error = None
+            return KnowledgeSearchService()
+        except Exception as exc:
+            self._service_init_error = str(exc)
+            return None
+
+    def _get_knowledge_service(self) -> Optional["KnowledgeSearchService"]:
+        """Reuse injected service or lazily create a default one."""
+        if self.knowledge_service is None:
+            self.knowledge_service = self._create_knowledge_service()
+        return self.knowledge_service
 
     async def ingest(
         self,
@@ -65,42 +83,50 @@ class CaseIngestor:
                 "error": validation["error"],
             }
 
+        success = False
+        error_message: Optional[str] = None
+
         try:
-            # Ingest to knowledge base
-            if self.knowledge_service:
-                success = await self.knowledge_service.ingest_case(
+            # Ingest to knowledge base using a real service instance.
+            knowledge_service = self._get_knowledge_service()
+            if knowledge_service is None:
+                error_message = "Knowledge service unavailable for automatic ingestion"
+                if self._service_init_error:
+                    error_message = f"{error_message}: {self._service_init_error}"
+            else:
+                success = await knowledge_service.ingest_case(
                     case_id=case.case_id,
                     title=case.title,
                     content=case.content,
                     case_type=case.case_type,
                     source=case.source,
                 )
-            else:
-                # Mock ingestion for testing
-                success = True
-
-            # Log ingestion
-            log_entry = {
-                "timestamp": datetime.now().isoformat(),
-                "case_id": case.case_id,
-                "case_type": case.case_type,
-                "source": case.source,
-                "success": success,
-            }
-            self._ingestion_log.append(log_entry)
-
-            return {
-                "success": success,
-                "case_id": case.case_id,
-                "timestamp": log_entry["timestamp"],
-            }
+                if not success:
+                    error_message = "Knowledge service ingest_case returned False"
 
         except Exception as e:
-            return {
-                "success": False,
-                "case_id": case.case_id,
-                "error": str(e),
-            }
+            error_message = str(e)
+
+        # Log ingestion outcome for observability.
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "case_id": case.case_id,
+            "case_type": case.case_type,
+            "source": case.source,
+            "success": success,
+        }
+        if error_message:
+            log_entry["error"] = error_message
+        self._ingestion_log.append(log_entry)
+
+        response = {
+            "success": success,
+            "case_id": case.case_id,
+            "timestamp": log_entry["timestamp"],
+        }
+        if error_message:
+            response["error"] = error_message
+        return response
 
     async def ingest_batch(
         self,
