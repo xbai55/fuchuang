@@ -366,11 +366,11 @@ def build_role_prompt_guidance(user_role: str, language: str = "zh-CN") -> str:
         )
 
     return (
-        f"Role={normalized_role}. Use a '{tone}' communication style. "
-        f"Prioritize risks around: {focus}. "
-        f"Core user reminder: {education}. "
-        "Output concrete anti-fraud steps first, then concise reasoning. "
-        "When transfer, OTP, remote-control, or account handover signals appear, escalate decisively."
+        f"用户角色={normalized_role}。请使用“{tone}”的沟通风格。"
+        f"优先关注：{focus}。"
+        f"核心提醒：{education}。"
+        "请先给出具体反诈操作，再给出简洁理由。"
+        "一旦出现转账、验证码、远程控制或账户交接信号，要果断升级风险判断。"
     )
 
 

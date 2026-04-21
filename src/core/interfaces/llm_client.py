@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 
 from src.core.utils.json_utils import get_text_content, extract_json_from_text
+from src.core.utils.multimodal_payloads import LLMUserContent
 
 
 @dataclass
@@ -75,7 +76,7 @@ class LLMClient:
     async def achat(
         self,
         system_prompt: str,
-        user_prompt: str,
+        user_prompt: LLMUserContent,
         parse_json: bool = True,
         config: Optional[RunnableConfig] = None,
     ) -> LLMResponse:
@@ -114,7 +115,7 @@ class LLMClient:
     def chat(
         self,
         system_prompt: str,
-        user_prompt: str,
+        user_prompt: LLMUserContent,
         parse_json: bool = True,
         config: Optional[RunnableConfig] = None,
     ) -> LLMResponse:

@@ -20,6 +20,7 @@ from src.core.utils import (
     load_node_config,
     normalize_user_role,
 )
+from src.core.utils.multimodal_payloads import build_text_and_video_user_content
 from src.core.utils.risk_personalization import build_personalized_thresholds, risk_level_from_score
 
 
@@ -291,13 +292,22 @@ class RiskEngine:
         user_prompt = self.user_template.format(**context)
         timing = dict((state.workflow_metadata or {}).get("performance_timing") or {})
         state.workflow_metadata["performance_timing"] = timing
+        user_content = user_prompt
+
+        video_path = self._get_primary_video_path(state)
+        if video_path:
+            try:
+                user_content = build_text_and_video_user_content(user_prompt, video_path)
+                timing["risk_llm_multimodal_video_enabled"] = True
+            except Exception as exc:
+                timing["risk_llm_multimodal_video_error"] = str(exc)
 
         try:
             # Call LLM
             llm_started_at = perf_counter()
             response = await self.llm.achat(
                 system_prompt=self.system_prompt,
-                user_prompt=user_prompt,
+                user_prompt=user_content,
                 parse_json=True,
             )
             timing.update(
@@ -337,6 +347,16 @@ class RiskEngine:
                 low_threshold=low_threshold,
                 high_threshold=high_threshold,
             )
+
+    def _get_primary_video_path(self, state: GlobalState) -> Optional[str]:
+        for media in state.input_files:
+            media_type = getattr(media, "type", "")
+            media_type_value = media_type.value if hasattr(media_type, "value") else str(media_type)
+            if media_type_value == "video":
+                video_url = str(getattr(media, "url", "") or "").strip()
+                if video_url:
+                    return video_url
+        return None
 
     def _build_assessment_context(
         self,

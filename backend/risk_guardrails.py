@@ -4,6 +4,10 @@ from typing import Any, Optional
 
 
 _SEPARATOR_RE = re.compile(r"[\s\-_.,，。！？!?、；;:：\"'“”‘’（）()\[\]{}<>《》/\\|`~+]+")
+_ACTUAL_URL_RE = re.compile(
+    r"(https?://|www\.|[a-z0-9][a-z0-9.-]{1,}\.(com|cn|net|top|xyz|cc|vip|shop|site|live|info|biz|app|link)\b)",
+    re.IGNORECASE,
+)
 
 _LAW_ENFORCEMENT_TOKENS = (
     "警察",
@@ -85,6 +89,32 @@ _CREDIT_REPAIR_TOKENS = ("注销", "清空", "修复", "消除")
 _CREDIT_LOAN_TOKENS = ("征信", "校园贷", "学生贷", "贷款记录")
 _REMOTE_CONTROL_TOKENS = ("远程协助", "远程控制", "屏幕共享", "共享屏幕", "会议软件")
 _FINANCIAL_ACCOUNT_TOKENS = ("银行卡", "账户", "余额", "转账", "付款", "验证码")
+_QR_LINK_TOKENS = ("二维码", "扫码", "扫描二维码", "长按识别", "识别二维码", "点击链接", "点链接", "短链接", "短链", "链接", "网址")
+_QR_LINK_REWARD_TOKENS = ("领取补贴", "领补贴", "补贴", "领取奖励", "领奖励", "奖励", "领奖", "返利", "红包", "福利", "提现")
+_DATA_COLLECTION_TOKENS = ("填写信息", "填资料", "实名", "实名认证", "登录", "注册", "下载", "安装", "进群", "入群")
+_ANTI_FRAUD_SOURCE_TOKENS = (
+    "国家反诈中心",
+    "反诈中心",
+    "公安部刑侦局",
+    "警方提醒",
+    "公安提醒",
+    "反诈提醒",
+    "全民反诈",
+    "96110",
+)
+_ANTI_FRAUD_NOTICE_TOKENS = (
+    "都是诈骗",
+    "谨防诈骗",
+    "防范诈骗",
+    "反诈提醒",
+    "安全提示",
+    "如有疑问请拨打96110",
+    "请拨打96110咨询",
+    "96110咨询",
+    "不要点击",
+    "不要下载",
+    "不要转账",
+)
 
 _COMMON_FRAUD_SCENARIOS = (
     {
@@ -193,6 +223,20 @@ _COMMON_FRAUD_SCENARIOS = (
         ),
         "warning_message": "对方要求远程协助、屏幕共享并查看银行卡、账户或验证码，属于高风险诈骗。请立即断开连接。",
     },
+    {
+        "scam_type": "二维码/链接诱导诈骗",
+        "id": "qr_link_reward_lure",
+        "score": 88,
+        "groups": (
+            ("二维码或链接引导", _QR_LINK_TOKENS),
+            ("补贴/奖励/返利诱导", _QR_LINK_REWARD_TOKENS),
+        ),
+        "boosts": (
+            ("附带信息提交或安装动作", _DATA_COLLECTION_TOKENS, 2),
+            ("附带敏感操作", _SENSITIVE_ACTION_TOKENS, 2),
+        ),
+        "warning_message": "对方通过二维码或链接诱导领取补贴、奖励、返利或红包，属于高风险诈骗引流。不要扫码、不要点链接、不要继续填写信息或下载应用。",
+    },
 )
 
 
@@ -293,8 +337,30 @@ def _build_scenario_warning(text: str, scenario: dict[str, Any]) -> Optional[dic
     }
 
 
+def is_authoritative_anti_fraud_notice(text: str) -> bool:
+    normalized_text = unicodedata.normalize("NFKC", str(text or "")).strip()
+    lowered_text = normalized_text.lower()
+    if not normalized_text:
+        return False
+    if _ACTUAL_URL_RE.search(lowered_text):
+        return False
+
+    has_source = any(token in normalized_text for token in _ANTI_FRAUD_SOURCE_TOKENS)
+    has_notice = any(token in normalized_text for token in _ANTI_FRAUD_NOTICE_TOKENS)
+    has_reminder_shape = bool(
+        re.search(r"凡是.{0,48}(都是诈骗|谨防诈骗)", normalized_text)
+        or re.search(r"提醒您.{0,48}(诈骗|96110)", normalized_text)
+    )
+    has_hotline = "96110" in normalized_text
+
+    return (has_source and (has_notice or has_reminder_shape)) or (has_hotline and has_reminder_shape)
+
+
 def build_critical_text_guardrail_warning(text: str) -> Optional[dict[str, Any]]:
     """Detect deterministic high-risk fraud patterns that must not be left to LLM scoring."""
+    if is_authoritative_anti_fraud_notice(text):
+        return None
+
     for scenario in _COMMON_FRAUD_SCENARIOS:
         warning = _build_scenario_warning(text, scenario)
         if warning is not None:

@@ -1,13 +1,17 @@
+import json
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.language_prompts import build_single_pass_system_prompt
 from backend.risk_guardrails import (
     apply_critical_warning_floor,
     build_critical_text_guardrail_warning,
+    is_authoritative_anti_fraud_notice,
 )
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_police_transfer_threat_is_high_risk_guardrail():
@@ -114,3 +118,29 @@ def test_critical_guardrail_exposes_popup_and_score_explanation():
     assert guarded["popup_severity"] == "blocking"
     assert guarded["voice_warning_required"] is True
     assert guarded["matched_rule_ids"] == ["critical:law_enforcement_transfer"]
+
+
+def test_qr_and_link_lure_is_high_risk_guardrail():
+    warning = build_critical_text_guardrail_warning(
+        "对方让我长按识别二维码领取补贴，再点链接下载APP填写信息。"
+    )
+
+    assert warning is not None
+    assert warning["risk_level"] == "high"
+    assert warning["risk_score"] >= 85
+    assert warning["scam_type"] == "二维码/链接诱导诈骗"
+
+
+def test_default_fast_warning_rules_include_qr_and_link_soft_and_hard_rules():
+    config = json.loads((ROOT / "config" / "fast_warning_rules.json").read_text(encoding="utf-8"))
+    rule_ids = {rule["rule_id"] for rule in config.get("structured_rules") or []}
+
+    assert "soft.qr_link_redirect" in rule_ids
+    assert "hard.qr_link_reward_lure" in rule_ids
+
+
+def test_authoritative_anti_fraud_notice_is_recognized():
+    text = "【国家反诈中心】公安部刑侦局提醒您：凡是要求您点击链接下载App进行理赔、退税或办贷款的，都是诈骗！如有疑问请拨打96110咨询。"
+
+    assert is_authoritative_anti_fraud_notice(text) is True
+    assert build_critical_text_guardrail_warning(text) is None

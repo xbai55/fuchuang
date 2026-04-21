@@ -107,7 +107,7 @@ class VideoProcessor(BaseProcessor):
         await self.initialize()
 
         file_path = media_file.url
-        task_id = context.get("task_id", "default") if context else "default"
+        task_id = (context or {}).get("task_id") or "default"
 
         # Handle URLs
         if is_url(file_path):

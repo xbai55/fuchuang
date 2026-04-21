@@ -37,11 +37,13 @@ try:
     from risk_guardrails import (
         apply_critical_warning_floor,
         build_critical_text_guardrail_warning,
+        is_authoritative_anti_fraud_notice,
     )
 except ImportError:
     from backend.risk_guardrails import (
         apply_critical_warning_floor,
         build_critical_text_guardrail_warning,
+        is_authoritative_anti_fraud_notice,
     )
 from notification_recipients import resolve_guardian_email_receiver
 from schemas import FeedbackRequest
@@ -58,6 +60,10 @@ from src.core.utils.risk_personalization import (
     build_personalized_thresholds,
     format_combined_profile_text,
     normalize_user_role,
+)
+from src.core.utils.multimodal_payloads import (
+    build_text_and_video_user_content,
+    flatten_multimodal_text_content,
 )
 from src.core.models import MediaFile, MediaType
 from src.evolution.monitoring_service import monitoring_service
@@ -1044,13 +1050,34 @@ def _build_single_pass_user_prompt(
     threshold_reasons = list(dynamic_thresholds.get("adjustment_reasons") or [])
     threshold_reason_text = "；".join(str(item) for item in threshold_reasons) if threshold_reasons else "无"
     language_instruction = ""
+    role_guidance_label = "角色提示"
+    rag_context_label = "RAG相似案例与知识片段"
+    short_term_label = "短期记忆（最近检测）"
+    long_term_label = "长期行为画像"
+    threshold_label = "个性化风险分段阈值"
+    user_input_label = "用户原始输入"
+    score_instruction = (
+        "评分说明：请以你对原始输入、OCR文本、RAG片段和用户上下文的语义判断为主进行评分；"
+        "快速预警只是参考证据，不是分数基线，也不能直接决定最终分数。\n"
+        "若无明显风险，请在 0-15 内按文本实际内容给分，而不是固定输出 6。\n"
+    )
     if normalized_language == "en-US":
         language_instruction = (
             "Output language: English only. Write WARNING_MESSAGE, risk explanation, "
             "action suggestions, and the full Markdown report in English. Keep metadata keys unchanged.\n\n"
         )
-
-    role_guidance_label = "Role-specific guidance" if normalized_language == "en-US" else "Role-specific guidance"
+        role_guidance_label = "Role-specific guidance"
+        rag_context_label = "RAG similar cases / knowledge snippets"
+        short_term_label = "Short-term memory (recent detections)"
+        long_term_label = "Long-term behavior profile"
+        threshold_label = "Personalized risk thresholds"
+        user_input_label = "Original user input"
+        score_instruction = (
+            "Score instruction: decide RISK_SCORE primarily by your own semantic assessment of the original input, OCR text, "
+            "RAG snippets, and user context. Fast warning is only supporting evidence, not a score baseline.\n"
+            "For clearly low-risk/general inquiry content with no warning evidence, choose a score in 0-15 based on the actual content; "
+            "do not always output 6.\n"
+        )
 
     media_hint = "用户包含媒体文件上传；请在报告中说明当前结论以文本与预警为基础。" if has_media else "本次输入为文本场景。"
 
@@ -1064,25 +1091,19 @@ def _build_single_pass_user_prompt(
         f"快速预警等级: {warning_level}\n"
         f"快速预警提示: {warning_text or '无'}\n"
         f"快速预警线索:\n{warning_clues_text}\n\n"
-        "RAG similar cases / knowledge snippets:\n"
+        f"{rag_context_label}:\n"
         f"{rag_context_text}\n\n"
-        "短期记忆（最近检测）:\n"
+        f"{short_term_label}:\n"
         f"{short_term_summary}\n\n"
-        "长期行为画像:\n"
+        f"{long_term_label}:\n"
         f"{long_term_summary}\n\n"
-        "个性化风险分段阈值:\n"
+        f"{threshold_label}:\n"
         f"- low_threshold: {low_threshold}\n"
         f"- high_threshold: {high_threshold}\n"
         f"- 调整依据: {threshold_reason_text}\n\n"
-        "用户原始输入:\n"
+        f"{user_input_label}:\n"
         f"{(message or '').strip()}\n\n"
-        "Score instruction: decide RISK_SCORE primarily by your own semantic assessment of the original input, OCR text, "
-        "RAG snippets, and user context. Fast warning is only supporting evidence, not a score baseline.\n"
-        "For clearly low-risk/general inquiry content with no warning evidence, choose a score in 0-15 based on the actual content; "
-        "do not always output 6.\n"
-        "请以你对原始输入、OCR文本、RAG片段和用户上下文的语义判断为主进行评分；快速预警只是参考证据，"
-        "不是分数基线，也不能直接决定最终分数。\n"
-        "若无明显风险，请在 0-15 内按文本实际内容给分，而不是固定输出 6。\n"
+        f"{score_instruction}"
         "请务必按照系统协议输出，并确保 RISK_LEVEL 与上述个性化阈值分段一致。"
     )
 
@@ -1342,7 +1363,10 @@ async def _stream_single_pass_chunks(
             "model": model_name,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": str(getattr(messages[1], "content", ""))},
+                {
+                    "role": "user",
+                    "content": flatten_multimodal_text_content(getattr(messages[1], "content", "")),
+                },
             ],
             "stream": True,
             "options": options,
@@ -1416,6 +1440,7 @@ async def _run_single_pass_detection_stream(
     language: str = "zh-CN",
     memory_context: Optional[dict[str, Any]] = None,
     dynamic_thresholds: Optional[dict[str, Any]] = None,
+    video_path: Optional[str] = None,
 ) -> tuple[dict[str, Any], int]:
     total_started_at = perf_counter()
     model_config = _get_single_pass_model_config()
@@ -1434,9 +1459,15 @@ async def _run_single_pass_detection_stream(
         language=language,
     )
     system_prompt = _get_single_pass_system_prompt(model_mode, language)
+    user_content: Any = user_prompt
+    if video_path:
+        try:
+            user_content = build_text_and_video_user_content(user_prompt, video_path)
+        except Exception as exc:
+            print(f"[single_pass_llm] multimodal video payload disabled: {exc}")
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
+        HumanMessage(content=user_content),
     ]
 
     task_manager.publish_task_event(task_id, {"event": "report_stream_started", "stream_mode": "token"})
@@ -2083,6 +2114,40 @@ def _build_fast_text_warning(message: str, has_media: bool, user_role: str = "ge
             "is_preliminary": True,
             "popup_severity": "none",
             "source_priority": ["media_ai_pending", "fast_text_rules", "local_rag", "llm_review"],
+        }
+
+    if is_authoritative_anti_fraud_notice(text):
+        warning_message = "检测到官方反诈提醒/科普内容，当前更像安全公告而非诈骗样本。"
+        if has_media:
+            warning_message += " 同时存在媒体内容，后续仍会继续进行图像/语音/视频核验。"
+        return {
+            "risk_score": 8,
+            "risk_level": "low",
+            "risk_clues": ["识别为官方反诈提醒语境", "包含国家反诈中心/公安提醒/96110 等安全提示信息"],
+            "warning_message": warning_message,
+            "source": "official_anti_fraud_notice",
+            "is_preliminary": True,
+            "user_role": normalize_user_role(user_role or "general"),
+            "consultative_context": True,
+            "transaction_signal_count": 0,
+            "hard_signal_count": 0,
+            "signal_severity": "soft",
+            "matched_rule_ids": ["info:official_anti_fraud_notice"],
+            "hard_rule_ids": [],
+            "soft_rule_ids": ["info:official_anti_fraud_notice"],
+            "matched_spans": [],
+            "source_priority": ["official_anti_fraud_notice", "llm_review"],
+            "popup_severity": "none",
+            "voice_warning_required": False,
+            "guardian_intervention_required": False,
+            "score_breakdown": {
+                "source": "official_anti_fraud_notice",
+                "components": [{"id": "info:official_anti_fraud_notice", "type": "context", "severity": "soft", "score": 8}],
+                "hard_rule_count": 0,
+                "soft_rule_count": 1,
+                "transaction_signal_count": 0,
+                "hard_signal_count": 0,
+            },
         }
 
     critical_warning = build_critical_text_guardrail_warning(text)
@@ -2933,6 +2998,7 @@ async def detect_fraud(
                 language=requested_language,
                 memory_context=memory_context,
                 dynamic_thresholds=memory_context.get("dynamic_thresholds"),
+                video_path=video_path,
             )
             result["performance_timing"] = {
                 **performance_timing,
@@ -3216,6 +3282,7 @@ async def detect_fraud_async(
                         language=requested_language,
                         memory_context=memory_context,
                         dynamic_thresholds=memory_context.get("dynamic_thresholds"),
+                        video_path=video_path,
                     )
                     result["performance_timing"] = {
                         **performance_timing,
