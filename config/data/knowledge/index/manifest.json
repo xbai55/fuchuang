@@ -1,6 +1,12 @@
 {
-  "backend": "tfidf",
+  "backend": "hybrid",
+  "index_backend": "tfidf",
   "model_name": null,
-  "chunk_count": 7,
-  "last_hot_reload": "2026-04-18T15:26:00.498449+00:00"
+  "chunk_count": 40213,
+  "last_hot_reload": "2026-04-21T08:40:42.421261+00:00",
+  "index_dir": "C:\\Users\\administrator1\\Desktop\\fuchuang\\config\\data\\knowledge\\index",
+  "chromadb_status": "success",
+  "chromadb_count": 40213,
+  "chromadb_dir": "C:\\Users\\administrator1\\Desktop\\fuchuang\\config\\data\\knowledge\\index\\chromadb",
+  "embedding_model": "local-hash"
 }
